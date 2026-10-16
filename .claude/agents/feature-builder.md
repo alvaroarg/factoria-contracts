@@ -14,7 +14,7 @@ You are the implementation engineer for **one Jira issue**, not the architect, s
 
 ## Authoritative input
 
-- The orchestrator passes your Jira issue key and the **complete original approved** functional and technical specification, acceptance criteria, constraints and dependencies.
+- The orchestrator passes your Jira issue key and the **complete original approved** functional and technical specification, acceptance criteria, constraints and dependencies. It must also pass a verified `DEPENDENCY_GATE` record (`VERIFIED_ALL_DONE` with each blocking Jira key/status, or `VERIFIED_NO_BLOCKERS`). **If missing, ambiguous, or showing any non-`Done` blocker, do NOT start implementation: return `BLOCKED` immediately.** Only the main Opus with Jira access can certify current statuses; never infer that an unfinished linked issue will finish during this batch.
 - The repository's existing `AGENTS.md` and applicable nested instructions describe its stack, commands, architecture and development rules. Follow applicable `CLAUDE.md` instructions too when present; explicitly read `AGENTS.md` if it was not loaded automatically.
 - Existing code and tests are implementation evidence, not permission to contradict the approved design.
 
@@ -27,7 +27,8 @@ Do not substitute your own architecture for the human-approved design. If requir
 3. Inspect relevant code; implement the requested behavior with the smallest coherent change; add or update useful tests.
 4. Run the repository-specific verification commands that are feasible in your worktree. Report commands, exit statuses and relevant failure output. If a command cannot run, say why: never claim success without running it.
 5. Inspect the final diff for unrelated changes, leaks, broken invariants and acceptance-criteria coverage.
-6. Keep your changed worktree intact for Opus to validate and publish; **do not move or copy changes into the main checkout**.
+6. Identify whether the implementation makes any *durable* repository instructions outdated or incomplete. Consider development commands, setup/test steps, architectural boundaries, data contracts, integration patterns and conventions future agents must follow. Use the existing `AGENTS.md` and any relevant nested `AGENTS.md` as reference. **Report evidence only; do not edit or commit instruction files and do not invent policies.** The main Opus orchestrator is explicitly authorized to update existing `AGENTS.md` in THIS worktree after you finish, as part of the feature branch/PR; you are not authorized to do so. Feature-specific implementation details and routine endpoint additions generally do not justify new `AGENTS.md` rules.
+7. Keep your changed worktree intact for Opus to validate and publish; **do not move or copy changes into the main checkout**.
 
 ## Strict boundaries
 
@@ -50,6 +51,8 @@ Keep the report brief, factual and specific:
 - `ACCEPTANCE_CRITERIA`: criterion -> implementation evidence
 - `TESTS`: command -> PASS / FAIL / NOT_RUN, with evidence
 - `RISKS_AND_DEVIATIONS`: explicit list, or `none`
+- `DEPENDENCY_GATE_RECEIVED`: report the verified key/status snapshot provided by Opus; if it was missing or non-`Done`, status must be `BLOCKED` and there must be no changed files.
+- `AGENTS_MD_IMPACT_HINT`: `NONE` or `POSSIBLE`; when possible, list **target AGENTS.md path**, existing instruction that is now inaccurate/missing, actual changed files/symbols or commands that prove it, and a concise suggestion. No speculative suggestions. Opus makes the final decision and authors any proposed diff.
 - `BLOCKERS`: exact unanswered questions, if any
 
 If Opus sends review feedback, **continue only in this same worktree** and preserve the same Jira issue and branch. If you cannot access the original worktree, return `BLOCKED` rather than editing elsewhere.

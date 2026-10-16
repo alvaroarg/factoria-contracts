@@ -27,7 +27,8 @@ If any essential input is unavailable, report `BLOCKED`. Inspect the **actual pu
 - Changes follow the approved technical design and repository conventions.
 - Identify concrete bugs, broken edge cases, security/auth issues, data corruption risks and regressions.
 - Test coverage and test results are credible; do not claim tests passed merely because the PR says so.
-- No unrelated scope, protected-file edits, secret leakage or hidden architecture changes.
+- No unrelated scope, unauthorized protected-file edits, secret leakage or hidden architecture changes. **Exception:** existing root/nested `AGENTS.md` may have been edited by the main Opus orchestrator in the feature PR to document durable changes. Audit these edits against the actual code, approved Jira design and previous instructions: do not reject them merely because AGENTS.md was edited, but request changes if they introduce unapproved architectural policy or unsupported claims. All other instruction/policy files remain protected.
+- Assess *documentation drift*: does the actual PR introduce or change a durable instruction that a future agent needs, contradict current root/nested `AGENTS.md`, or alter tested setup commands? Report only high-confidence evidence. **Do not edit AGENTS.md.** The orchestrator can update existing AGENTS.md in the feature branch before review; your task is to independently evaluate the changed file in the actual published diff, or flag necessary drift if it remains outdated. Do not require updates by default to return PASS. If the approved acceptance criteria explicitly require docs updates, enforce that criterion as usual.
 - Distinguish actual defects from optional style suggestions. Prefer reproducible, high-signal findings.
 
 ## Read-only boundary
@@ -44,6 +45,7 @@ If any essential input is unavailable, report `BLOCKED`. Inspect the **actual pu
 - `ACCEPTANCE_CRITERIA`: each -> satisfied / unsatisfied / unverified with evidence
 - `FINDINGS`: for each blocking defect: severity, file/line or symbol, bug scenario, supporting evidence, minimum correction expected
 - `VALIDATION_GAPS`: checks not run or evidence missing
+- `AGENTS_MD_REVIEW`: `NOT_CHANGED` | `VALIDATED` | `CHANGES_REQUESTED` | `UNVERIFIABLE`. For changed AGENTS.md files, enumerate path, instructions changed, supporting code/tests and any unsupported policy or inaccuracies. For unchanged files, return evidence-backed `AGENTS_MD_IMPACT` of `NONE` or `CANDIDATE` where applicable. Only main Opus may change existing AGENTS.md in the issue worktree; you remain read-only.
 - `SUMMARY`: concise technical assessment
 
 Use `PASS` only when there are no known blocking findings. `PASS` means ready for **human review**, not approval to merge.
