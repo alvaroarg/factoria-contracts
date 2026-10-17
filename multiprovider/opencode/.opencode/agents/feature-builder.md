@@ -3,7 +3,6 @@ description: DeepSeek V4 Pro implementation agent, one Jira feature, targeted fi
 mode: subagent
 model: opencode-go/deepseek-v4-pro
 temperature: 0.1
-steps: 80
 permission:
   task: deny
   external_directory: deny
@@ -32,4 +31,4 @@ You are **DeepSeek V4 Pro**, implementing ONE human-approved Jira issue **on the
 - If a test/setup cannot succeed, report the real failure; do not loop repeatedly through venv setup or the same commands. One reasonable fix attempt for a deterministic test environment issue; never endlessly repair environment.
 - If the issue is unclear, dependencies incomplete, context missing, or first 10 steps yield no safe edit: return BLOCKED, rather than researching indefinitely.
 
-Output: issue key, source/test paths changed (or NONE), real first-edit evidence, tests and exit codes, AGENTS_MD_IMPACT_HINT, risks, BLOCKED reason when applicable. You have at most 80 steps; finishing early is a success.
+Output: issue key, source/test paths changed (or NONE), real first-edit evidence, tests and exit codes, AGENTS_MD_IMPACT_HINT, risks, BLOCKED reason when applicable. There is no step limit (only the runner time/token/no-edit watchdog applies); finishing early is a success.

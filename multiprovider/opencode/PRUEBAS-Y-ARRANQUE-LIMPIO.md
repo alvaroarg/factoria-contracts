@@ -33,7 +33,7 @@
 | Blocker en Human Review/Resolved | `inspect` | GATE_BLOCKED |
 | Issue blocks (no is blocked by) otra | `inspect` | No tratar esa issue saliente como prerequisite |
 | PR o rama remota ya existente | `build` | GATE_BLOCKED antes de inferencia |
-| Agente lee sin editar durante 360 s | `build` | BLOCKED_NO_PROGRESS_TIMEBOUND + kill group + sin retry |
+| Agente lee sin editar durante 900 s | `build` | BLOCKED_NO_PROGRESS_TIMEBOUND + kill group + sin retry |
 | 429 del provider | `build` | BLOCKED_QUOTA_429 si observable + sin retry |
 | Builder edita solo config protegida | `build` | No cuenta como progreso de source/tests; watchdog corta |
 | PR no creada | `build` | POSTFLIGHT_BLOCKED, sin falsa Human Review |

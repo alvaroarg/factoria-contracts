@@ -32,7 +32,7 @@ concurrency:
 jobs:
   factory:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 355
     permissions:
       contents: write
       pull-requests: write
@@ -145,8 +145,8 @@ jobs:
           set -euo pipefail
           python automation/opencode/guarded_run.py \
             --issue "$ISSUE_KEY" --base "$BASE_SHA" \
-            --no-edit-seconds 360 --total-seconds 2700 \
-            --max-reported-input-tokens 800000
+            --no-edit-seconds 900 --total-seconds 20400 \
+            --max-reported-input-tokens 5000000
 
       # Preserve the builder's work when the run fails: write the diff against
       # BASE_SHA (tracked + untracked files) to a .patch and upload it. NEVER

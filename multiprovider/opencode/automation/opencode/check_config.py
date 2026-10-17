@@ -10,7 +10,9 @@ from pathlib import Path
 ROOT = Path.cwd()
 AGENTS = {
     "factory-orchestrator": ("primary", "opencode-go/kimi-k3", 40),
-    "feature-builder": ("subagent", "opencode-go/deepseek-v4-pro", 80),
+    # None = no `steps` key: OpenCode then iterates without a step limit
+    # (bounded externally by guarded_run.py time/no-edit/token caps).
+    "feature-builder": ("subagent", "opencode-go/deepseek-v4-pro", None),
     "pr-reviewer": ("subagent", "opencode-go/kimi-k3", 15),
 }
 
@@ -21,7 +23,7 @@ def frontmatter(path):
     if len(parts) < 3 or parts[0].strip():
         raise ValueError(f"Missing YAML frontmatter: {path}")
     vals = {}
-    for key, value in re.findall(r"(?m)^(mode|model|steps):\s*(.+?)\s*$", parts[1]):
+    for key, value in re.findall(r"(?m)^(mode|model|steps|maxSteps):\s*(.+?)\s*$", parts[1]):
         vals[key] = value.strip("'\" ")
     return vals
 
@@ -36,10 +38,14 @@ def main():
         raise ValueError("default_agent must be factory-orchestrator; never allow fallback to build")
     if "jira" not in config.get("mcp", {}):
         raise ValueError("Jira MCP missing")
+    for name in AGENTS:
+        if "steps" in config.get("agent", {}).get(name, {}) or "maxSteps" in config.get("agent", {}).get(name, {}):
+            raise ValueError(f"opencode.json must not override steps for {name}")
     for name, (mode, model, steps) in AGENTS.items():
         path = ROOT / ".opencode" / "agents" / (name + ".md")
         fm = frontmatter(path)
-        if fm.get("mode") != mode or fm.get("model") != model or fm.get("steps") != str(steps):
+        expected_steps = None if steps is None else str(steps)
+        if fm.get("mode") != mode or fm.get("model") != model or fm.get("steps") != expected_steps:
             raise ValueError(f"Wrong agent identity/config for {name}: {fm}")
         if len(path.read_text(encoding="utf-8").splitlines()) < 12:
             raise ValueError(f"Missing contract for {name}")
@@ -58,7 +64,7 @@ def main():
             raise ValueError(f"Model {model} unavailable; do not auto substitute")
     if not os.environ.get("OPENCODE_GO_API_KEY"):
         raise ValueError("OPENCODE_GO_API_KEY missing")
-    print("CONFIG_OK: factory-orchestrator primary Kimi K3 (40), feature-builder DeepSeek V4 Pro (80), pr-reviewer Kimi K3 (15); models listed; no inference call")
+    print("CONFIG_OK: factory-orchestrator primary Kimi K3 (40), feature-builder DeepSeek V4 Pro (no step limit), pr-reviewer Kimi K3 (15); models listed; no inference call")
     return 0
 
 if __name__ == "__main__":
