@@ -275,11 +275,36 @@ class WorkflowZeroConfigTests(unittest.TestCase):
         self.assertNotIn('JIRA_DONE_STATUS', self.wf)
 
     def test_quota_controls_kept(self):
-        for needle in ('timeout-minutes: 35', '--no-edit-seconds 360', '--total-seconds 1800',
+        for needle in ('timeout-minutes: 50', '--no-edit-seconds 360', '--total-seconds 2700',
                        '--max-reported-input-tokens 800000', 'postflight.py', 'check_config.py',
                        'git fetch origin "$DEFAULT_BRANCH"', 'DEFAULT_BRANCH="master"', '- inspect', '- build'):
             self.assertIn(needle, self.wf)
         self.assertEqual(self.wf.count("steps.gate.outputs.has_work == 'true'"), 5)
 
+
+    def test_diff_artifact_step(self):
+        steps = self.wf.split('\n      - name: ')
+        guarded = next(i for i, s in enumerate(steps) if s.startswith('One guarded'))
+        save_i = next(i for i, s in enumerate(steps) if s.startswith('Save working-tree diff'))
+        up_i = next(i for i, s in enumerate(steps) if s.startswith('Upload diff artifact'))
+        self.assertTrue(guarded < save_i < up_i)
+        save, up = steps[save_i], steps[up_i]
+        for s in (save, up):
+            self.assertIn('if: always()', s)
+            self.assertIn('continue-on-error: true', s)
+        self.assertIn('git add -A', save)
+        self.assertIn('git diff --cached --binary "$BASE_SHA"', save)
+        self.assertIn('.patch', save)
+        self.assertIn('exit 0', save)
+        self.assertNotIn('set -e\n', save)
+        self.assertNotIn('git push', save)
+        self.assertNotIn('git commit', save)
+        self.assertNotIn('gh pr', save)
+        self.assertIn('uses: actions/upload-artifact@v4', up)
+        self.assertIn('name: opencode-factory-diff', up)
+        self.assertIn('retention-days: 7', up)
+        self.assertIn('if-no-files-found: ignore', up)
+        self.assertNotIn('--total-seconds 1800', self.wf)
+        self.assertNotIn('timeout-minutes: 35', self.wf)
 
 if __name__=='__main__': unittest.main()

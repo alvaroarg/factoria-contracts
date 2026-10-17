@@ -82,7 +82,7 @@ Recomendado la primera vez: `mode=inspect` (con o sin `issue_key`) para ver qué
 
 ## 7. Sobre el watchdog
 
-- `steps:30` NO obliga al modelo a editar en diez pasos. Ese es un mandato del prompt.
-- `guarded_run.py` sí mata los procesos si pasan 360 s desde el lanzamiento sin cambios fuente/test detectables. Es un límite temporal **externo real**. 35 minutos capan todo el job. Cambiar umbrales requiere editar el workflow; registra esos cambios.
+- `steps:80` (builder) NO obliga al modelo a editar en diez pasos. Ese es un mandato del prompt.
+- `guarded_run.py` sí mata los procesos si pasan 360 s desde el lanzamiento sin cambios fuente/test detectables. Es un límite temporal **externo real**. El tiempo total del guarded run es 2700 s (45 min) y 50 minutos capan todo el job. Cambiar umbrales requiere editar el workflow; registra esos cambios.
 - El watchdog añade un corte en 800.000 tokens de entrada únicamente SI vienen informados en eventos JSON, sin contar el coste exacto, el cache pricing o la cuota. El watchdog NO controla gasto exacto en Go: una cuota podría consumirse en menos tiempo. Usar `Use balance=false` y hacer pruebas cortas sigue siendo imprescindible.
 - No se reintenta una sesión fallida. No se crea otro builder desde cero.
