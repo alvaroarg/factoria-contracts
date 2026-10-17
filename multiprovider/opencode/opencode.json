@@ -1,0 +1,30 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "factory-orchestrator",
+  "model": "opencode-go/kimi-k3",
+  "share": "disabled",
+  "provider": {
+    "opencode-go": {
+      "options": {
+        "apiKey": "{env:OPENCODE_GO_API_KEY}"
+      }
+    }
+  },
+  "mcp": {
+    "jira": {
+      "type": "local",
+      "command": ["uvx", "mcp-atlassian"],
+      "enabled": true,
+      "timeout": 30000,
+      "environment": {
+        "JIRA_URL": "{env:JIRA_URL}",
+        "JIRA_USERNAME": "{env:JIRA_USERNAME}",
+        "JIRA_API_TOKEN": "{env:JIRA_API_TOKEN}",
+        "JIRA_PROJECTS_FILTER": "{env:JIRA_PROJECT_KEY}",
+        "ENABLED_TOOLS": "jira_search,jira_get_issue,jira_get_transitions,jira_transition_issue,jira_add_comment",
+        "READ_ONLY_MODE": "false",
+        "TOOLSETS": "default"
+      }
+    }
+  }
+}
