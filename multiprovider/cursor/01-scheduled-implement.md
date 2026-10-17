@@ -18,6 +18,10 @@ MANDATORY DONE GATE: inspect all Jira issue links and dependency fields and expl
 
 Once eligible: move to In Progress and verify. Implement one issue in one independent branch, preserving the design and existing repo instructions. Run actual prescribed tests; do not fabricate checks. Where lasting repo conventions or commands changed, you may edit existing AGENTS.md in this feature branch (not main), with a concise PR justification; do not create speculative policy. Publish ONE DRAFT GitHub PR (do not merge), include this literal marker in PR body:
 
+**Localized status names:** Jira may return translated `status.name` values depending on the account language. Treat `Ready` and `Listo` as the same status, and `Done` and `Finalizada` as the same status, in every check of this contract (candidate selection, dependency gate and re-checks). Any other name is not `Ready`/`Done`.
+
+**Fresh base:** create the feature branch from `origin/master` (the repository's actual default branch) immediately after a fresh `git fetch`, never from a stale local branch or another feature branch, and record that base commit.
+
 Factory Engine: cursor
 
 Also include Jira URL, acceptance mapping, evidence of tests, risks, and AGENTS.md explanation. Transition Jira to AI Review once real PR exists. Record PR URL and run ID in Jira. Do NOT set Human Review from this build automation: an independent reviewer automation will handle this. If tools cannot create PR/change Jira, report BLOCKED without claiming completion. No provider crossover, deployment, permission changes, force pushes or cross-feature conflict resolution.

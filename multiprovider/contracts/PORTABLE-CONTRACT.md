@@ -15,12 +15,14 @@ The human owns product architecture, issue approval, conflict resolution, and me
 4. Require human-approved detailed technical spec, verifiable acceptance criteria, explicit correct target repo, no missing architecture decisions, no active execution and no open PR for the same Jira key.
 5. Enumerate all blocking dependencies via structured Jira links, dependency fields, and explicit textual blockers. Interpret link directions correctly: `A blocks B` does NOT mean B blocks A. Ambiguous semantics -> SKIP.
 6. Fetch EACH blocker by exact key in Jira; `status.name` must be exactly `Done` (case/whitespace normalization only). NOT Human Review, Resolved, statusCategory Done or a merged PR. Missing/incomplete status or link data -> SKIP. No blockers is acceptable only if all dependency sources were inspected successfully.
+   - **Localized status names:** Jira may return translated `status.name` values depending on the account language. Treat `Ready` and `Listo` as the same status, and `Done` and `Finalizada` as the same status, in every check of this contract (candidate selection, dependency gate and re-checks). Any other name is not `Ready`/`Done`.
 7. Recheck the candidate's status, its route label and EVERY blocker immediately before transition to `In Progress`. Do not dispatch if a gate fails. Document skip; do not move skipped issues to Blocked.
 8. One non-overlapping run per engine/repo; Jira status alone is not an atomic lease. Do not launch overlapping schedules for same engine/repo. Two engines cannot own the same issue when routing is exclusive.
 
 ## Workflow
 - Claim eligible issue -> In Progress with verified transition and run identification.
 - Implement only the original approved design, scoped to the target repo, in a dedicated branch/worktree or provider-isolated checkout. Multiple features may edit the same files in separate workspaces; Git integration conflicts belong to the human.
+- Create every builder worktree/branch from `origin/master` (the repository's actual default branch) immediately after a fresh `git fetch`, never from a stale local branch or another feature branch, and record that base commit.
 - Execute feasible prescribed tests, recording actual commands, exit codes and unrun checks. Never invent PASS.
 - Parent orchestration agent MAY update EXISTING AGENTS.md files inside the feature branch when objectively necessary for durable, accurate project instructions. Record why and have changes reviewed. Do not invent new architecture/policies; do not modify main directly. Feature builders and reviewers do not edit instruction files.
 - Publish one independent DRAFT PR against actual default branch. PR includes `Factory Engine: <claude|cursor|opencode>`, Jira issue URL, test evidence, acceptance mapping, documented AGENTS.md changes and human-review requirement.
