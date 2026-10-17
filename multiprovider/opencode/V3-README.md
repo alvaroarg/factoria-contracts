@@ -16,7 +16,7 @@ IDs exactos: `opencode-go/kimi-k3` y `opencode-go/deepseek-v4-pro`.
 
 > **Cambio de Álvaro (17/10/2026):** orquestador y reviewer pasan de Kimi K2.7 Code a **Kimi K3** (`opencode-go/kimi-k3`); el builder sigue siendo DeepSeek V4 Pro. **Ojo con la cuota:** en OpenCode Go, Kimi K3 tiene bastante menos cupo que K2.7 Code (equivale a unos **15 $ al mes** de uso frente a **60 $** de K2.7 Code). Con K3 en dos roles, la ventana de 5 horas se agota antes: vigila la consola Go en el primer piloto y mantén **Use balance desactivado**.
 
-> **Equivalencias del tablero KAN (obligatorias):** Ready = **Listo**, Done = **Finalizada** (In Progress = En curso). `jira_gate.py` acepta siempre las dos formas de cada par; `JIRA_READY_STATUS`/`JIRA_DONE_STATUS` pueden añadir más nombres separados por comas. Las ramas de feature se crean siempre desde un **fetch fresco de `origin/master`**.
+> **Equivalencias del tablero KAN (obligatorias):** Ready = **Listo**, Done = **Finalizada** (In Progress = En curso). Es la misma regla que el contrato de Claude (`multiprovider/claude/01-jira-three-parallel-STRICT-ROUTING.md`, "Localized status names") y el de Cursor: cualquier otro nombre no es Ready/Done, y `JIRA_READY_STATUS`/`JIRA_DONE_STATUS` ya no amplían la lista. **No hace falta configurar nada:** sin variables nuevas, sin `issue_key` obligatorio y sin cambiar las stories de Jira (repo por defecto = el del workflow; se aceptan `Repository:`, `Repositorio:` y `Repositorio destino:`). Las ramas de feature se crean siempre desde un **fetch fresco de `origin/master`**.
 
 **Nueva disciplina:** 1 issue, 1 builder inicial, 0 reinicios nuevos, máximo 1 corrección solamente si se puede retomar EXACTAMENTE el mismo builder y branch; sin reanudación verificable = `BLOCKED`. Antes se hablaba de 3 rondas: ese límite se ha reducido **deliberadamente en este piloto** por el incidente de cuota.
 
@@ -35,7 +35,7 @@ IDs exactos: `opencode-go/kimi-k3` y `opencode-go/deepseek-v4-pro`.
 - Este directorio (`multiprovider/opencode/`) refleja la raíz de un repo de producto: `opencode.json`, `.opencode/agents/`, `.github/workflows/opencode-factory.yml`, `automation/opencode/` y `tests/` (ejecutables con `python -m pytest -q tests` o `python -m unittest discover -s tests` desde aquí).
 - **`opencode-factory-PILOT.yml` queda SUPERADO por `opencode-factory.yml`** (v3). No se ha borrado por la regla de no borrar nada; Álvaro puede eliminarlo cuando quiera. No lo copies a un repo de producto junto al v3: habría dos workflows de implementación.
 - `opencode-connectivity.yml` se mantiene solo para diagnósticos puntuales.
-- La v3 exige `issue_key` explícito: la selección autónoma (issue_key vacío) del piloto anterior NO existe en v3, por diseño, hasta validar el piloto.
+- `issue_key` es opcional, como en el piloto anterior: vacío = el runner selecciona **sin LLM** (REST/JQL, `Rank ASC`) la primera story elegible y procesa solo esa; si no hay ninguna, `NO_WORK` en verde sin gastar cuota.
 
 ## Árbol del paquete
 
@@ -68,17 +68,17 @@ PRUEBAS-Y-ARRANQUE-LIMPIO.md
 2. Abre el ZIP y copia la carpeta `repo/.opencode/agents/` al repo de producto. **Sustituye los TRES agentes OpenCode anteriores**. Borra/reemplaza el YAML antiguo de OpenCode (`opencode-factory-PILOT.yml`/`opencode-factory.yml` según lo que tengas) para **evitar dos workflows de implementación**.
 3. Copia `repo/automation/opencode/` y `.github/workflows/opencode-factory.yml` al repositorio.
 4. En `opencode.json` actual, **FUSIONA** el nuevo `default_agent`, `model`, `provider` y el bloque `mcp.jira`. No borres configuraciones de tu proyecto ajenas. Verifica el JSON localmente: `python -m json.tool opencode.json >/dev/null`.
-5. Conserva tus Secrets ya configurados: `OPENCODE_GO_API_KEY`, `JIRA_API_TOKEN`, `JIRA_USERNAME`; y Variables: `JIRA_URL`, `JIRA_PROJECT_KEY`, `ENABLE_OPENCODE_FACTORY_PILOT=false` inicialmente. Ajusta las variables opcionales `JIRA_READY_STATUS` y `JIRA_DONE_STATUS` para coincidir **literalmente** con el workflow real (por ejemplo `Listo`/`Finalizada` si ése es tu tablero, en vez de los defaults ingleses). `JIRA_HUMAN_REVIEW_STATUS` si hace falta.
-6. Si `Repository` o las dependencias viven en campos propios de Jira, añade opcionalmente variables `JIRA_REPOSITORY_FIELD_ID` y `JIRA_DEPENDENCIES_FIELD_ID` con su ID `customfield_12345` y expórtalas al job (ver MIGRACION.md). Sin campo ni `Repository: owner/repo` explícito, el gate fallará por seguridad.
+5. Conserva tus Secrets ya configurados: `OPENCODE_GO_API_KEY`, `JIRA_API_TOKEN`, `JIRA_USERNAME`, y la variable `JIRA_URL` que ya usaba la versión anterior. **No hay que crear ninguna variable nueva**: `JIRA_PROJECT_KEY` (por defecto `KAN`), `JIRA_HUMAN_REVIEW_STATUS` (por defecto `Human Review`) y `ENABLE_OPENCODE_FACTORY_PILOT` son opcionales; esta última solo bloquea build si vale literalmente `false`. `JIRA_READY_STATUS`/`JIRA_DONE_STATUS` ya no se usan (Ready=Listo, Done=Finalizada fijos, regla de Claude).
+6. No hay que tocar las stories: sin `Repository:` se usa el repo del workflow; también se aceptan `Repositorio:` y `Repositorio destino:`. Una story que nombre otro repo se rechaza. `JIRA_REPOSITORY_FIELD_ID`/`JIRA_DEPENDENCIES_FIELD_ID` son opcionales, solo para campos propios (ver MIGRACION.md).
 7. En la consola OpenCode Go comprueba que **Use balance esté desactivado**. Esto se gestiona en la consola, no por YAML, para que un 429 por cuota no consuma crédito Zen adicional.
 8. `git add ...`, revisa el diff y haz commit/push. El workflow aparece en **GitHub → Actions → OpenCode Factory - bounded single issue**.
 
 ## Cómo probar SIN gastar cuota de Go
 
-- Lanza `Run workflow` con **`mode=inspect`** e `issue_key=KAN-9` (u otra issue concreta). Este modo valida configuración + elegibilidad sin invocar modelos ni editar Jira/archivos de producto.
-- **KAN-9 ya fue movida manualmente en Jira por el usuario para comenzar de cero.** NO volver a cambiar su estado ni intentar recuperar trabajo previo. Ejecuta `inspect` para verificar el estado exacto Ready, `agent-ready`, `engine-opencode`, Repository y blockers Done. Si falla el gate, corrige solo el dato que indique el error. El runner también rechaza PRs o ramas remotas antiguas.
-- La clave enviada al workflow debe pertenecer al proyecto `JIRA_PROJECT_KEY` y **las dependencias bloqueantes deben estar todas en el estado literal definido por `JIRA_DONE_STATUS`**.
-- Sólo si `inspect` pasa, cambia `ENABLE_OPENCODE_FACTORY_PILOT` a `true` y lanza `mode=build` en una issue que puedas permitirte probar. Es una única ejecución, jamás tres jobs ni nuevas issues escogidas por el agente.
+- Lanza `Run workflow` con **`mode=inspect`** y `issue_key` vacío (selección automática) o una clave concreta. Este modo valida configuración + elegibilidad sin invocar modelos ni editar Jira/archivos de producto.
+- **KAN-9 ya fue movida manualmente en Jira por el usuario para comenzar de cero.** NO volver a cambiar su estado ni intentar recuperar trabajo previo. Ejecuta `inspect` para verificar `Ready`/`Listo`, `agent-ready`, `engine-opencode`, repo y blockers `Done`/`Finalizada`. Si falla el gate, corrige solo el dato que indique el error. El runner también rechaza PRs o ramas remotas antiguas.
+- La clave debe pertenecer al proyecto (`JIRA_PROJECT_KEY`, por defecto `KAN`) y **todas las dependencias bloqueantes deben estar en `Done`/`Finalizada`**.
+- Después lanza `mode=build` (es el valor por defecto; no hace falta ninguna variable). Es una única ejecución de una sola issue, jamás tres jobs; la issue la elige el runner de forma determinista, nunca el agente.
 
 ## Aseguramiento y límites
 

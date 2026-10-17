@@ -1,18 +1,26 @@
 name: OpenCode Factory - bounded single issue
 
-# Deliberately manual. Add a separate tested scheduled selector later.
+# Deliberately manual. Zero configuration, like the previous pilot: no GitHub
+# Variables to create, no issue_key required, no Jira story changes.
+#  - issue_key empty  => deterministic selection (REST/JQL, NO LLM) of the FIRST
+#    eligible story by Rank ASC; one issue per run; none => NO_WORK, green.
+#  - Ready = Listo and Done = Finalizada (same rule as the Claude/Cursor contracts).
+#  - Repository defaults to this repo when the story does not declare one.
+#  - ENABLE_OPENCODE_FACTORY_PILOT is OPTIONAL: only the literal value 'false'
+#    acts as a kill switch for build; unset => runs normally.
 on:
   workflow_dispatch:
     inputs:
       issue_key:
-        description: "Exact Jira key, e.g. KAN-9"
+        description: "Opcional: clave Jira exacta (p. ej. KAN-9). Vacío = selección automática de la primera story elegible"
         type: string
-        required: true
+        required: false
+        default: ""
       mode:
         description: "inspect consumes no LLM quota; build is one guarded execution"
         type: choice
         required: true
-        default: inspect
+        default: build
         options:
           - inspect
           - build
@@ -33,11 +41,12 @@ jobs:
       OPENCODE_GO_API_KEY: ${{ secrets.OPENCODE_GO_API_KEY }}
       OPENCODE_CONFIG_CONTENT: '{"default_agent":"factory-orchestrator","provider":{"opencode-go":{"options":{"apiKey":"{env:OPENCODE_GO_API_KEY}"}}}}'
       JIRA_URL: ${{ vars.JIRA_URL }}
-      JIRA_PROJECT_KEY: ${{ vars.JIRA_PROJECT_KEY }}
+      JIRA_PROJECT_KEY: ${{ vars.JIRA_PROJECT_KEY || 'KAN' }}
+      # Optional custom-field overrides; empty => description parsing / defaults.
       JIRA_REPOSITORY_FIELD_ID: ${{ vars.JIRA_REPOSITORY_FIELD_ID }}
       JIRA_DEPENDENCIES_FIELD_ID: ${{ vars.JIRA_DEPENDENCIES_FIELD_ID }}
-      JIRA_READY_STATUS: ${{ vars.JIRA_READY_STATUS || 'Ready' }}
-      JIRA_DONE_STATUS: ${{ vars.JIRA_DONE_STATUS || 'Done' }}
+      # Ready=Listo / Done=Finalizada are fixed in jira_gate.py (Claude contract
+      # rule, "any other name is not Ready/Done"); nothing to configure.
       JIRA_HUMAN_REVIEW_STATUS: ${{ vars.JIRA_HUMAN_REVIEW_STATUS || 'Human Review' }}
       JIRA_USERNAME: ${{ secrets.JIRA_USERNAME }}
       JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
@@ -86,23 +95,25 @@ jobs:
           ISSUE_KEY: ${{ inputs.issue_key }}
         run: |
           set -euo pipefail
+          # Empty ISSUE_KEY => deterministic auto-selection (no LLM). NO_WORK exits 0.
           python automation/opencode/jira_gate.py --issue "$ISSUE_KEY" --mode "$MODE"
 
-      - name: Block unsafe build activation
-        if: ${{ inputs.mode == 'build' }}
+      - name: Optional kill switch (only when the variable is literally 'false')
+        if: ${{ inputs.mode == 'build' && steps.gate.outputs.has_work == 'true' }}
         shell: bash
         env:
           ENABLE_PILOT: ${{ vars.ENABLE_OPENCODE_FACTORY_PILOT }}
         run: |
           set -euo pipefail
-          if [ "$ENABLE_PILOT" != "true" ]; then
-            echo "CONFIG_BLOCKED: ENABLE_OPENCODE_FACTORY_PILOT must be true for build"
+          if [ "$ENABLE_PILOT" = "false" ]; then
+            echo "CONFIG_BLOCKED: ENABLE_OPENCODE_FACTORY_PILOT=false switches build off (delete the variable or set true to run)"
             exit 2
           fi
+          echo "Build enabled (ENABLE_OPENCODE_FACTORY_PILOT='${ENABLE_PILOT:-<unset>}')"
 
       - name: Prepare dedicated feature branch (NO LLM)
         id: branch
-        if: ${{ inputs.mode == 'build' }}
+        if: ${{ inputs.mode == 'build' && steps.gate.outputs.has_work == 'true' }}
         shell: bash
         env:
           BRANCH: ${{ steps.gate.outputs.branch }}
@@ -125,7 +136,7 @@ jobs:
           echo "Prepared $BRANCH from freshly fetched origin/$DEFAULT_BRANCH ($BASE_SHA)"
 
       - name: One guarded Kimi K3 + DeepSeek V4 Pro + Kimi K3 execution
-        if: ${{ inputs.mode == 'build' }}
+        if: ${{ inputs.mode == 'build' && steps.gate.outputs.has_work == 'true' }}
         shell: bash
         env:
           ISSUE_KEY: ${{ steps.gate.outputs.issue }}
@@ -138,7 +149,7 @@ jobs:
             --max-reported-input-tokens 800000
 
       - name: Verify published Draft PR, reviewer marker and Jira (READ ONLY)
-        if: ${{ inputs.mode == 'build' }}
+        if: ${{ inputs.mode == 'build' && steps.gate.outputs.has_work == 'true' }}
         shell: bash
         env:
           ISSUE_KEY: ${{ steps.gate.outputs.issue }}
@@ -147,7 +158,7 @@ jobs:
           python automation/opencode/postflight.py --issue "$ISSUE_KEY"
 
       - name: Upload sanitized execution summary (NO raw LLM/Jira logs)
-        if: ${{ always() && inputs.mode == 'build' }}
+        if: ${{ always() && inputs.mode == 'build' && steps.gate.outputs.has_work == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: opencode-factory-summary

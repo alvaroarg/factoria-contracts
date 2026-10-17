@@ -29,6 +29,6 @@ OpenCode Go is a model SUBSCRIPTION/PROVIDER, NOT a hosted job scheduler. Use of
 ## Factoría v3 (17/10/2026) — supersedes the pilot above
 
 - New bounded single-issue engine: see `V3-README.md`, `MIGRACION.md` and `PRUEBAS-Y-ARRANQUE-LIMPIO.md`. Models: orchestrator **Kimi K3** (`opencode-go/kimi-k3`), builder **DeepSeek V4 Pro** (`opencode-go/deepseek-v4-pro`), reviewer **Kimi K3**. Note: Kimi K3 has a lower Go quota than Kimi K2.7 Code (about $15 vs $60 of monthly Go usage).
-- `.github/workflows/opencode-factory.yml` (v3, `mode=inspect|build`, explicit `issue_key`) **supersedes `opencode-factory-PILOT.yml`**. The old file is kept only because nothing is deleted without Álvaro's explicit order; he may delete it. Never install both in a product repo.
+- `.github/workflows/opencode-factory.yml` (v3, `mode=inspect|build`, optional `issue_key` with deterministic no-LLM selection, no new GitHub Variables required) **supersedes `opencode-factory-PILOT.yml`**. The old file is kept only because nothing is deleted without Álvaro's explicit order; he may delete it. Never install both in a product repo.
 - Board equivalences kept: Ready = Listo, Done = Finalizada (`jira_gate.py` accepts both). Feature branches come from a fresh fetch of `origin/master`.
 - The model IDs above replace the older `glm-5.3` suggestion in "Auth blocker" step 1.

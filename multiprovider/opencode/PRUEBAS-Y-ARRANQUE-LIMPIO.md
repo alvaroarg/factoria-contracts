@@ -5,10 +5,10 @@
 **Decisión operativa:** el usuario ya ha movido KAN-9 manualmente en Jira y ha decidido implementarla **desde cero**. El paquete NO debe mover la issue de vuelta a Ready, ni intentar restaurar sesiones, worktrees o tareas de GLM-5.3.
 
 1. Confirmar que la ejecución anterior fue cancelada y no sigue activa en GitHub Actions.
-2. Lanzar `mode=inspect`, `issue_key=KAN-9`, **sin LLM y sin cambios en Jira**. El gate comprueba el estado Ready configurado, las etiquetas `agent-ready` + `engine-opencode`, el repo, los blockers y la inexistencia de ramas/PR previas.
+2. (Recomendado) Lanzar `mode=inspect` con `issue_key` vacío o `KAN-9`, **sin LLM y sin cambios en Jira**. No hace falta crear variables ni editar la story. El gate comprueba `Ready`/`Listo`, las etiquetas `agent-ready` + `engine-opencode`, el repo (por defecto el del workflow), los blockers en `Done`/`Finalizada` y la inexistencia de ramas/PR previas.
 3. Si `inspect` devuelve `GATE_BLOCKED`, corregir únicamente la causa identificada. **No hacer otra transición de Jira si ya está Ready.**
 4. Comprobar que hay cuota Go disponible y `Use balance` desactivado.
-5. Solo con inspect verde: habilitar la variable de piloto y ejecutar `mode=build` una única vez. El builder será DeepSeek V4 Pro; no se reaprovecha contexto de GLM.
+5. Ejecutar `mode=build` una única vez (no hace falta `ENABLE_OPENCODE_FACTORY_PILOT`; solo si existe con valor `false` bloquea). El builder será DeepSeek V4 Pro; no se reaprovecha contexto de GLM.
 
 **La ejecución fallida solo se conserva como evidencia histórica para evitar repetir el incidente; no es fuente de estado operativo.**
 
@@ -22,7 +22,14 @@
 | Sin `OPENCODE_GO_API_KEY` | `inspect` | CONFIG_BLOCKED |
 | Jira sin `engine-opencode` exclusivo | `inspect` | GATE_BLOCKED |
 | Jira en `En curso` / In Progress | `inspect` | GATE_BLOCKED; nunca reabrir automáticamente |
-| Jira en `Listo` (= Ready) y blockers en `Finalizada` (= Done) | `inspect` | Elegible (equivalencias del tablero KAN) |
+| Jira en `Listo` (= Ready) y blockers en `Finalizada` (= Done) | `inspect` | Elegible (misma regla de estados que Claude/Cursor) |
+| Estado con otro nombre (p. ej. `Selected for Development`) aunque haya variable | `inspect` | GATE_BLOCKED: "Any other name is not Ready/Done" |
+| Sin ninguna variable de GitHub (salvo secrets y `JIRA_URL` ya existentes) | `inspect`/`build` | Funciona con los valores por defecto |
+| `issue_key` vacío | `inspect`/`build` | Elige sin LLM la primera story elegible por Rank ASC; una sola |
+| `issue_key` vacío y ninguna elegible | `inspect`/`build` | `NO_WORK`, run en verde, sin llamar al modelo |
+| Story sin `Repository:` | `inspect` | Usa el repo del workflow |
+| Story con `Repositorio destino:` de otro repo | `inspect` | GATE_BLOCKED |
+| `ENABLE_OPENCODE_FACTORY_PILOT=false` | `build` | CONFIG_BLOCKED (interruptor opcional) |
 | Blocker en Human Review/Resolved | `inspect` | GATE_BLOCKED |
 | Issue blocks (no is blocked by) otra | `inspect` | No tratar esa issue saliente como prerequisite |
 | PR o rama remota ya existente | `build` | GATE_BLOCKED antes de inferencia |

@@ -1,13 +1,15 @@
 MANUAL SINGLE-ISSUE PILOT. You MUST be the named `factory-orchestrator` agent.
-Process EXACTLY Jira key __ISSUE_KEY__ in repository __GITHUB_REPOSITORY__.
+Process EXACTLY Jira key __ISSUE_KEY__ in repository __GITHUB_REPOSITORY__
+(given by the human or selected deterministically by the runner; never pick another).
 
 Use your project .opencode/agents/factory-orchestrator.md contract. The runner
 has independently validated the issue and created the feature branch.
 Independently recheck Jira approved spec, agent-ready, engine-opencode, repo,
 Ready status, links and live status of every blocker. Any blocker other than
-Done/Finalizada (or the configured JIRA_DONE_STATUS) means SKIP WITHOUT CLAIMING IT.
-Status equivalence on this board: Ready = Listo, Done = Finalizada,
-In Progress = En curso. The feature branch must come from a FRESH fetch of
+Done/Finalizada means SKIP WITHOUT CLAIMING IT. A story that declares no
+Repository/Repositorio targets __GITHUB_REPOSITORY__; one naming another repo is ineligible.
+**Localized status names:** Jira may return translated `status.name` values depending on the account language. Treat `Ready` and `Listo` as the same status, and `Done` and `Finalizada` as the same status, in every check of this contract (candidate selection, dependency gate and re-checks). Any other name is not `Ready`/`Done`.
+The feature branch must come from a FRESH fetch of
 origin/master (git fetch origin master; branch from origin/master), never from
 a stale local master or another branch; verify the runner's base SHA.
 

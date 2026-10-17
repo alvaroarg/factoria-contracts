@@ -57,8 +57,9 @@ def main():
             status = ((json.load(reply).get("fields") or {}).get("status") or {}).get("name")
     except Exception:
         raise RuntimeError("Cannot verify Jira final status") from None
-    expected = os.environ.get("JIRA_HUMAN_REVIEW_STATUS", "Human Review")
-    if status != expected:
+    # Default "Human Review" (no variable needed); the env var is an optional override.
+    expected = (os.environ.get("JIRA_HUMAN_REVIEW_STATUS") or "").strip() or "Human Review"
+    if " ".join(str(status or "").split()).casefold() != expected.casefold():
         raise RuntimeError(f"Jira status {status!r}, expected {expected!r}; do not claim complete")
     print("POSTFLIGHT_OK " + json.dumps({"issue": key, "pr": pr.get("url"), "draft": True,
                                          "review_head": sha, "jira": status}))

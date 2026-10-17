@@ -38,16 +38,21 @@ automation/opencode/pilot-prompt.md
 
 No reemplaces `AGENTS.md`, `.claude/agents/` ni `.cursor/agents/`.
 
-## 4. Jira
+## 4. Jira — no hay que cambiar ninguna story
 
-- La issue debe ser `Ready` (o `JIRA_READY_STATUS` exacto), tener `agent-ready` y **solo** `engine-opencode` entre las tres etiquetas de motores.
-- La descripción incluye `Repository: OWNER/REPO` en línea propia o tienes variable `JIRA_REPOSITORY_FIELD_ID` con nombre de campo exacto (por ejemplo `customfield_10024`). El runner necesita `JIRA_REPOSITORY_FIELD_ID: ${{ vars.JIRA_REPOSITORY_FIELD_ID }}` en `env:` si usas un campo específico.
-- Si las dependencias están también en un campo adicional, añade `JIRA_DEPENDENCIES_FIELD_ID: ${{ vars.JIRA_DEPENDENCIES_FIELD_ID }}`. El parser del gate recoge los enlaces estructurados y ciertas referencias explícitas textuales; **la lectura de dependencias ambigua todavía bloquea según el contrato del orquestador**.
-- Para tableros españoles: Ready = Listo y Done = Finalizada son equivalentes y el gate los acepta siempre. Otros nombres hay que añadirlos literalmente en `JIRA_READY_STATUS`/`JIRA_DONE_STATUS`; no se traduce cualquier categoría de Jira a Done.
+Funciona igual que el piloto anterior (Licitaciones PR #16 / contracts PR #5): las stories se quedan como están.
+
+- La issue debe estar en `Ready`/`Listo`, tener `agent-ready` y **solo** `engine-opencode` entre las tres etiquetas de motores.
+- **Repositorio:** si la story no declara repositorio, se usa el repo donde corre el workflow (`GITHUB_REPOSITORY`). Se aceptan `Repository: owner/repo`, `Repositorio: owner/repo` y `Repositorio destino: owner/repo` (con negrita/código Markdown o URL de GitHub). Si la story nombra **otro** repo, el gate falla. `JIRA_REPOSITORY_FIELD_ID` es opcional, solo si algún día usas un campo propio.
+- Dependencias: enlaces estructurados de Jira y referencias textuales explícitas (incluida la línea `Dependencias (is blocked by): KAN-8, …` de las stories KAN). `JIRA_DEPENDENCIES_FIELD_ID` es opcional. **La lectura de dependencias ambigua todavía bloquea según el contrato del orquestador**.
+- **Equivalencia de estados (misma regla que Claude y Cursor, copiada de `multiprovider/claude/01-jira-three-parallel-STRICT-ROUTING.md`):** `Ready` = `Listo` y `Done` = `Finalizada` en todas las comprobaciones (selección, gate de dependencias y re-checks). Cualquier otro nombre no es Ready/Done; solo se normalizan mayúsculas y espacios. Por eso `JIRA_READY_STATUS`/`JIRA_DONE_STATUS` ya no se usan: no hay nada que configurar y los tres providers se comportan igual.
+- **Sin `issue_key`:** el runner elige sin LLM (REST/JQL `project = KAN AND labels = agent-ready AND labels = engine-opencode … ORDER BY Rank ASC`) la **primera** story elegible: `Ready`/`Listo`, solo `engine-opencode`, repo correcto, todos los blockers en `Done`/`Finalizada` y sin rama `agent/<clave>` ni PR abierta. Una sola issue por run. Si no hay ninguna, `NO_WORK` y el run acaba en verde sin llamar al modelo.
 - Las ramas de feature se crean desde un fetch fresco de `origin/master` (el workflow hace `git fetch origin master` justo antes de crear `agent/<clave>`).
 - Si no hay transición disponible a In Progress, AI Review o Human Review, el piloto debe parar sin simularla.
 
 ## 5. En GitHub
+
+**No hay que crear ninguna variable nueva.** Basta con lo que ya usaba la versión anterior.
 
 Conserva Secrets existentes:
 
@@ -57,24 +62,23 @@ Conserva Secrets existentes:
 | `JIRA_USERNAME` | Sí |
 | `JIRA_API_TOKEN` | Sí |
 
-Variables:
+Variables (ya existentes o con valor por defecto; ninguna nueva es obligatoria):
 
 | Variable | Valor |
 |---|---|
-| `JIRA_URL` | HTTPS del Jira Cloud |
-| `JIRA_PROJECT_KEY` | p.ej., `KAN` |
-| `ENABLE_OPENCODE_FACTORY_PILOT` | `false` para inspección; `true` antes de build |
-| `JIRA_READY_STATUS` | por defecto `Ready`; el gate acepta siempre `Ready` y `Listo` como equivalentes (admite varios valores separados por comas) |
-| `JIRA_DONE_STATUS` | por defecto `Done`; el gate acepta siempre `Done` y `Finalizada` como equivalentes (admite varios valores separados por comas) |
-| `JIRA_HUMAN_REVIEW_STATUS` | por defecto `Human Review` |
+| `JIRA_URL` | HTTPS del Jira Cloud (la misma que ya usaban el piloto anterior y `opencode-connectivity.yml`) |
+| `JIRA_PROJECT_KEY` | opcional; por defecto `KAN` |
+| `ENABLE_OPENCODE_FACTORY_PILOT` | **opcional**. Sin la variable, build se ejecuta. Solo el valor literal `false` sirve de interruptor de apagado |
+| `JIRA_HUMAN_REVIEW_STATUS` | opcional; por defecto `Human Review` |
+| `JIRA_READY_STATUS` / `JIRA_DONE_STATUS` | **ya no se usan**: Ready=Listo y Done=Finalizada son fijos (regla del contrato de Claude) |
 
 No escribas secrets en `opencode.json` ni en commits. **Use balance OFF** en OpenCode Go Console.
 
 ## 6. Ensayo
 
-Primero: Actions → workflow → Run workflow → `mode=inspect`, `issue_key=KAN-9`. La issue ya fue reposicionada manualmente en Jira. No realices ninguna transición adicional por inercia: `inspect` confirma si su estado actual, labels, repo y blockers son elegibles. Ante `GATE_BLOCKED`, corrige solo el problema indicado, no repitas el batch a ciegas. Inspect no gasta tokens de OpenCode Go, pero sí hace llamadas normales a APIs Jira/GitHub.
+Como antes: Actions → workflow → Run workflow, y ya. `issue_key` vacío = selección automática de la primera story elegible; `mode` por defecto `build` (una ejecución vigilada).
 
-Sólo cuando inspect sea verde: Variable piloto `true`, `mode=build`, y **una sola issue**. Observa los logs; no habilites Schedule ni tres builders.
+Recomendado la primera vez: `mode=inspect` (con o sin `issue_key`) para ver qué story elegiría, sin gastar tokens de OpenCode Go (solo llamadas normales a Jira/GitHub). Ante `GATE_BLOCKED`, corrige solo el problema indicado; no repitas a ciegas. Después `mode=build`: **una sola issue** por run. Observa los logs; no habilites Schedule ni tres builders.
 
 ## 7. Sobre el watchdog
 
