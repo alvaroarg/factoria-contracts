@@ -39,3 +39,7 @@ The human owns product architecture, issue approval, conflict resolution, and me
 `ISSUE`, `ENGINE`, `REPO`, `ROUTE_VERIFIED`, `DEPENDENCY_GATE` (Done blockers / no blockers / skipped), `BRANCH`, `PR_URL`, `TEST_COMMANDS_AND_RESULTS`, `REVIEW_VERDICT`, `AGENTS_MD_ACTION`, `JIRA_STATUS`, `NEXT_HUMAN_ACTION`.
 
 Fail closed when required provider/Jira/GitHub/MCP permissions or actual code evidence are unavailable. No fake issue transitions, PRs or reviews.
+
+## Cursor v2 operational addendum
+
+Cursor uses ONE scheduled orchestration Automation (not two independent PR-trigger runs) plus repository subagents. It may implement up to 3 issues in the same invocation ONLY after the running environment proves distinct writable workspaces/branches and correct follow-up publication/resumption; otherwise use one. A new read-only reviewer subagent inspects the published diff after every change. Up to 3 corrections occur on the same branch/PR. AGENTS.md changes are owned by the parent orchestrator and reviewed before Jira Human Review. Separate v1 PR-event reviewer must be disabled. These are contracts, not guaranteed platform capabilities.

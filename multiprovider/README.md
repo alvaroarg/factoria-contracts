@@ -1,37 +1,66 @@
-# Agentic Factory - Multi-provider rollout v1 (2026-10-17)
+# Agentic Factory | Multi-provider v2 | Cursor orchestration parity pilot
 
-## Start from a proven baseline
-Your Claude v6 already completed an unattended nighttime batch. Do not rewrite its workers or scheduling. Multiprovider should be incremental, with Jira as the COMMON control plane and GitHub as the code source of truth.
+Updated 2026-10-17. **v2 supersedes v1's split Cursor build/review Automations.** Claude nightly batch is already working and remains unchanged except the previously prepared STRICT ENGINE ROUTING prompt. OpenCode is included unchanged as a guarded pilot, not a production unattended service.
 
-## Routing: the one mandatory cross-provider change
-Adopt EXACTLY ONE Jira label on each Ready issue: `engine-claude`, `engine-cursor`, `engine-opencode`. Keep `agent-ready`, full approved technical design, repository `owner/repo`, and the strict blockers-must-be-exactly-Done rule. See jira/ROUTING.md. Deploy Claude strict routing FIRST; otherwise Claude's single-provider fallback might pick unlabeled work.
+## What changes in v2?
 
-## What is inside
-- `contracts/PORTABLE-CONTRACT.md`: shared semantic contract, including strict Done dependency gate, routing, PRs, human-owned merges, and AGENTS.md edits only in feature branches.
-- `jira/ROUTING.md`: labels, rollout safety, JQL for all three engines.
-- `claude/01-jira-three-parallel-STRICT-ROUTING.md`: FULL Claude Routine prompt derived from v6 with only the routing admission rule tightened. Does not replace Claude agent files.
-- `cursor/01-scheduled-implement.md`: cloud native Cursor Automation instructions for one issue per run; Cursor will create a Draft PR and transition to AI Review.
-- `cursor/02-pr-review.md`: separate independent Cursor Automation on Draft PR opened; only PRs marked Factory Engine: cursor; PASS -> Human Review.
-- `opencode/.opencode/agents/`: initial Kimi K3 orchestrator and reviewer, GLM-5.3 builder. One issue per job until isolated parallel runs are verified.
-- `opencode/.github/workflows/opencode-factory-PILOT.yml`: OFF by default manually triggered official GitHub Action skeleton, NOT silently scheduled.
-- `opencode/SETUP-AND-LIMITATIONS.md`: provider Go and headless Jira auth blockers to resolve.
+The Cursor configuration is now **ONE cloud scheduled Automation** (orchestrator) backed by TWO committed custom Cursor subagents:
 
-## Recommended rollout order
-1. Ensure remaining Claude Ready tasks explicitly carry engine-claude. Paste updated FULL Claude Routine prompt, leave existing worker files untouched. Test NO_WORK for unassigned issues.
-2. In Cursor Automations, create a single-repo implementation Automation with Jira MCP + PR tool, manually test a Ready engine-cursor issue with no blockers, then a deliberately blocked one. Separately create PR reviewer triggered only for Cursor Draft PRs. Confirm billing/permissions.
-3. In OpenCode Go, verify models and run CLI locally (not claiming this is unattended), then solve secure NONINTERACTIVE Go/Jira auth for GitHub Actions. Pilot one engine-opencode issue manually with `workflow_dispatch`. Only activate schedule after success.
-4. Add second repository by cloning provider-specific contracts and retaining each repository's own AGENTS.md; always filter both engine and owner/repo.
-5. DO NOT automate GitHub merge, post-Routine human comments or Jira Done in this phase. Keep Done manual after merge; blocked dependent work needs that Done state.
+- `.cursor/agents/feature-builder.md` -> implement one approved issue in an explicitly isolated branch/worktree/cloud copy.
+- `.cursor/agents/pr-reviewer.md` -> independently review a real published PR with a fresh context, no edits.
+- `cursor/01-scheduled-implement.md` -> main orchestration prompt: select up to 3 Cursor issues, enforce Jira Done dependency gate, spawn builders in parallel **only if isolated environments really work**, verify, update AGENTS.md when justified, publish Draft PR, spawn reviewer, request up to 3 correction rounds, advance Jira to Human Review only on credible PASS.
 
-## Provider-specific caveats
-- Cursor Automations offer native scheduling, MCP tools and PR support, but billing/plan access is separate and provider cloud models are not guaranteed to have Claude-style three independent worktrees in one run.
-- OpenCode Go supplies models and subscription allowance, not the cloud runner. Official GitHub Action requires credentials; Jira MCP interactive OAuth from a laptop does not solve headless CI authentication. The pilot is intentionally gated.
-- `AGENTS.md` remains the universal repo-specific architecture source. Opus is allowed to edit it inside the PR according to Claude v6; other orchestrators obey the same semantic permission, never main.
+**Do not install a Cursor orchestrator agent file in a product repo.** Its contract is in the Automation prompt, matching Claude architecture. Do not duplicate global spec in AGENTS.md. Existing Claude files remain unchanged.
 
-Official references:
+## Product repo layout
+
+```text
+product-repo/
+  AGENTS.md                         # existing, specific to repo
+  .claude/agents/
+    feature-builder.md              # keep Claude v6
+    pr-reviewer.md                  # keep Claude v6
+  .cursor/agents/
+    feature-builder.md              # v2 Cursor contract
+    pr-reviewer.md                  # v2 Cursor contract
+  ... actual product code
+```
+
+Cursor docs prioritize `.cursor/agents` over equivalent `.claude/agents` files, which is why two Cursor-specific files matter here.
+
+## Install / activate in order
+
+1. **Jira router first.** Keep EXACTLY one label per Ready issue: `engine-claude`, `engine-cursor`, or `engine-opencode`, plus `agent-ready`, exact Repository and full approved spec. Every blocking dependency must be `Done`. See `jira/ROUTING.md`.
+2. **Protect Claude.** Ensure Claude Ready issues carry `engine-claude` and that your existing Claude Routine uses `claude/01-jira-three-parallel-STRICT-ROUTING.md`. Do not change proven Claude feature-builder/pr-reviewer files.
+3. **Commit only the two Cursor agent files** from `cursor/.cursor/agents/` into your product repo's `.cursor/agents/` and push. Leave `AGENTS.md` as-is.
+4. **Cursor account entitlement:** verify that your Cursor plan actually enables Cloud Agents and Automations. Current docs put these capabilities on Premium and above; Cursor Plus does not provide them. Do not assume Grokbot access implies an Automation subscription. Billing is based on cloud agent usage.
+5. **Cursor environment:** set up a working Cloud Agent environment for ONE repo; configure Jira MCP (full issue detail, issue link lookup, transition, comments), GitHub (actual diff, branch write, create Draft PR). Ensure tests run in the cloud. Configure minimum necessary secrets/permissions.
+6. **Migration:** DISABLE the old v1 separate `Draft PR opened` reviewer Automation; use `cursor/02-migration-old-reviewer.md`. Reconfigure its v1 daily build Automation (do not create a duplicate) to the FULL v2 instructions in `cursor/01-scheduled-implement.md`. Schedule only daily.
+7. **Manual pilot first:** test with exactly one `engine-cursor` issue, verify routing + dependency gate + real Draft PR + fresh independent review + Jira state. Read `cursor/TEST-MATRIX.md`.
+8. **Parallel capability gate:** explicitly verify isolated writable subagent worktrees/VMs and PR publication/resume in THIS Automation context. Only if proven allow 3. Otherwise **automatically limit to 1 and log `PARALLELISM_UNVERIFIED`**. No shared-checkout parallel writers.
+9. **After pilot:** enable the daily schedule staggered from Claude, preferably while the two services cannot compete over the same issue (engine labels protect selection but are not distributed locks).
+
+## Files outside Cursor
+
+- `claude/01-jira-three-parallel-STRICT-ROUTING.md`: the full existing Claude prompt with multi-provider labels, strict Done gate and Opus-owned AGENTS.md edits (unchanged from v1).
+- `contracts/PORTABLE-CONTRACT.md`: source-neutral policy; now supplemented for Cursor's single-automation review cycle.
+- `jira/ROUTING.md`: Jira tagging convention and query templates (unchanged).
+- `opencode/`: v1 guarded one-issue OpenCode Go pilot and CLI/GitHub Actions setup (unchanged). Not an unattended multi-issue system yet.
+
+## Explicit limitations, not hidden functionality
+
+- Cursor's current docs support background subagents and isolated project copies, **but this does not prove that a given scheduled Automation session can orchestrate 3 independent writable subagents and reliably resume them after publication**. The prompt instructs the model to verify this and degrade to one issue; this is a behavioral requirement, not an external hard lock.
+- The `readonly: true` reviewer frontmatter and task instructions reduce editing permissions, but should not be confused with a hard sandbox for external Jira/GitHub tools. Disable reviewer's write tools through account permissions where possible and audit the first run.
+- Cursor Cloud Agents / Automations are metered; verify current plan's access. OpenCode Go itself does not provide a cloud scheduler, so its GitHub Actions pilot remains disabled by default.
+- This is not an automatic setup of live Jira/Cloud Agent/GitHub credentials. No PRs have been generated by this package alone. Do not claim success before a real run verifies it.
+- Comments received from the HUMAN after the scheduled run, GitHub merge -> Jira Done and daily main audit are future workflows (same as Claude).
+
+## Relevant official references
+
+- Cursor Subagents: https://cursor.com/docs/subagents
+- Cursor Cloud Agents: https://cursor.com/docs/cloud-agent
 - Cursor Automations: https://cursor.com/docs/cloud-agent/automations
-- Cursor AGENTS.md: https://cursor.com/docs/rules
-- OpenCode GitHub Action: https://opencode.ai/docs/github/
-- OpenCode agent syntax: https://opencode.ai/docs/agents/
-- OpenCode Go: https://opencode.ai/docs/go/
-- OpenCode MCP: https://opencode.ai/docs/mcp-servers/
+- Cursor Models/Pricing: https://cursor.com/docs/models-and-pricing
+- Cursor Cloud Environment: https://cursor.com/docs/cloud-agent/setup
+- Cursor Jira: https://cursor.com/docs/integrations/jira
+- OpenCode GitHub Actions: https://opencode.ai/docs/github/
