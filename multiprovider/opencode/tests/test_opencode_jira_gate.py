@@ -275,8 +275,8 @@ class WorkflowZeroConfigTests(unittest.TestCase):
         self.assertNotIn('JIRA_DONE_STATUS', self.wf)
 
     def test_quota_controls_kept(self):
-        for needle in ('timeout-minutes: 50', '--no-edit-seconds 360', '--total-seconds 2700',
-                       '--max-reported-input-tokens 800000', 'postflight.py', 'check_config.py',
+        for needle in ('timeout-minutes: 355', '--no-edit-seconds 900', '--total-seconds 20400',
+                       '--max-reported-input-tokens 5000000', 'postflight.py', 'check_config.py',
                        'git fetch origin "$DEFAULT_BRANCH"', 'DEFAULT_BRANCH="master"', '- inspect', '- build'):
             self.assertIn(needle, self.wf)
         self.assertEqual(self.wf.count("steps.gate.outputs.has_work == 'true'"), 5)
@@ -305,6 +305,10 @@ class WorkflowZeroConfigTests(unittest.TestCase):
         self.assertIn('retention-days: 7', up)
         self.assertIn('if-no-files-found: ignore', up)
         self.assertNotIn('--total-seconds 1800', self.wf)
-        self.assertNotIn('timeout-minutes: 35', self.wf)
+        # Line-anchored so 'timeout-minutes: 355' does not match the old 35/50.
+        self.assertNotRegex(self.wf, r'(?m)timeout-minutes: (35|50)\s*$')
+        for old in ('--total-seconds 2700', '--no-edit-seconds 360'):
+            self.assertNotIn(old, self.wf)
+        self.assertNotRegex(self.wf, r'--max-reported-input-tokens 800000\b')
 
 if __name__=='__main__': unittest.main()

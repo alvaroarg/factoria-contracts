@@ -2,7 +2,8 @@
 """External execution watchdog for a single OpenCode invocation.
 
 Hard controls: no second attempt, time cap, initial SOURCE/TEST diff deadline.
-OpenCode agent `steps` is additionally capped in each agent definition.  The
+OpenCode agent `steps` is capped for orchestrator (40) and reviewer (15); the
+builder has no `steps` key (unlimited), so these external caps bound it.  The
 10-step-without-edit rule is a prompt rule; its step count is not independently
 provable from every OpenCode JSON emitter.  The time-based kill IS enforceable.
 """
@@ -118,9 +119,9 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--issue", required=True)
     p.add_argument("--base", required=True)
-    p.add_argument("--no-edit-seconds", type=int, default=360)
-    p.add_argument("--total-seconds", type=int, default=1800)
-    p.add_argument("--max-reported-input-tokens", type=int, default=800000)
+    p.add_argument("--no-edit-seconds", type=int, default=900)
+    p.add_argument("--total-seconds", type=int, default=20400)
+    p.add_argument("--max-reported-input-tokens", type=int, default=5000000)
     args = p.parse_args()
     issue = args.issue.upper()
     if not re.fullmatch(r"[A-Z][A-Z0-9_]*-\d+", issue):
