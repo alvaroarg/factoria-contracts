@@ -18,3 +18,10 @@ OpenCode Go is a model SUBSCRIPTION/PROVIDER, NOT a hosted job scheduler. Use of
 - Give Jira the minimal project/issue permissions and GitHub write access only to PRs/branches. Do not grant merging or deployment rights.
 - Workflow schedules are usually UTC and can be delayed; do not schedule it to race Claude/Cursor's windows.
 - No user comments to PRs are automatically handled by this pilot; that is intentionally a later phase.
+
+## Pilot update (steps 6 and 7)
+
+- `opencode-connectivity.yml` (save as `.github/workflows/opencode-connectivity.yml`): manual connectivity test. Its last step, `Read Jira using Kimi (READ ONLY)`, checks that Kimi really calls `jira_search` and `jira_get_issue` via MCP with `READ_ONLY_MODE=true`. Do not enable the pilot until this step proves real MCP calls.
+- `opencode-factory-PILOT.yml`: manual-only (`workflow_dispatch`), gated by `ENABLE_OPENCODE_FACTORY_PILOT`. Optional `issue_key` input: with a key it processes exactly that issue; empty means autonomous selection of the first eligible `Ready`/`Listo` + `agent-ready` + ONLY `engine-opencode` issue by `Rank ASC`, with every blocker `Done`/`Finalizada`, batch limit 1, or `NO_WORK` without changes.
+- `pr-reviewer.md` allows only read commands (`gh pr view`, `gh pr diff`, `git diff`, `git status`) so it can inspect the published PR diff. This is not credential isolation; prefer a read-only token or GitHub MCP for production.
+- Repository setting needed: Actions → General → Workflow permissions → allow GitHub Actions to create pull requests. The contract still forbids merging.

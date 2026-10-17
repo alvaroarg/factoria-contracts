@@ -1,44 +1,116 @@
-name: OpenCode Factory PILOT (manual until auth validated)
+name: OpenCode Factory - Manual PILOT
 
-# This is a pilot skeleton. It is disabled by default; enable only AFTER
-# verifying headless OpenCode Go AND Jira MCP credentials, model and permissions.
-# For an unattended daily run, add `schedule` after the pilot passes.
 on:
   workflow_dispatch:
+    inputs:
+      issue_key:
+        description: "Opcional: clave Jira exacta. Vacío = selección autónoma"
+        required: false
+        default: ""
+        type: string
 
 concurrency:
   group: opencode-factory-${{ github.repository }}
   cancel-in-progress: false
 
 jobs:
-  opencode:
+  pilot:
     if: ${{ vars.ENABLE_OPENCODE_FACTORY_PILOT == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
+
     permissions:
       contents: write
       pull-requests: write
       issues: read
+
+    env:
+      OPENCODE_GO_API_KEY: ${{ secrets.OPENCODE_GO_API_KEY }}
+      OPENCODE_CONFIG_CONTENT: '{"provider":{"opencode-go":{"options":{"apiKey":"{env:OPENCODE_GO_API_KEY}"}}}}'
+      JIRA_URL: ${{ vars.JIRA_URL }}
+      JIRA_PROJECT_KEY: ${{ vars.JIRA_PROJECT_KEY }}
+      JIRA_USERNAME: ${{ secrets.JIRA_USERNAME }}
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - name: Run OpenCode official GitHub action
+
+      - name: Install uv for Jira MCP
+        uses: astral-sh/setup-uv@v10.3.0
+
+      - name: Check contracts and MCP config
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f opencode.json
+          test -f .opencode/agents/factory-orchestrator.md
+          test -f .opencode/agents/feature-builder.md
+          test -f .opencode/agents/pr-reviewer.md
+          test -n "$OPENCODE_GO_API_KEY"
+          test -n "$JIRA_API_TOKEN"
+          test -n "$JIRA_PROJECT_KEY"
+          uvx mcp-atlassian --help > /dev/null
+
+      - name: Execute exactly one Jira feature
         uses: anomalyco/opencode/github@latest
-        env:
-          # TODO: verify provider Go key injection into official action.
-          # A secret env var ALONE may not authenticate OpenCode Go.
-          OPENCODE_GO_API_KEY: ${{ secrets.OPENCODE_GO_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           use_github_token: true
           model: opencode-go/kimi-k3
           agent: factory-orchestrator
           share: false
           prompt: |
-            Execute ONE batch PILOT of ONE eligible Jira issue for this
-            repository, using your factory-orchestrator contract.
-            Only engine-opencode; require every Jira blocker status Done.
-            If Jira MCP, provider credentials or tools are unavailable,
-            stop without editing or creating a PR.
+            MANUAL PILOT. Requested issue key: "${{ inputs.issue_key }}"
+
+            Treat status Ready and Listo as the same, and
+            Done and Finalizada as the same, in every check.
+
+            If the requested issue key is non-empty, process
+            EXACTLY that Jira issue and NO other issue.
+
+            If the requested issue key is empty, AUTONOMOUS
+            SELECTION. Query Jira via MCP for issues in this
+            project with status Ready AND label agent-ready
+            AND label engine-opencode, ordered by Rank ASC.
+            Fetch each full issue and reject any with zero or
+            multiple engine labels (must be ONLY
+            engine-opencode), wrong repository, or any blocker
+            not exactly Done. Take the FIRST eligible one and
+            process ONLY that one (batch limit 1 for this
+            pilot). If none is eligible, return NO_WORK with
+            skip reasons and modify nothing.
+
+            Enforce the full factory-orchestrator contract.
+            Confirm the issue belongs to repository
+            ${{ github.repository }} and is Ready +
+            agent-ready + ONLY engine-opencode.
+
+            Inspect issue links and description, fetch
+            every blocking issue and require ALL blockers
+            exactly Done. Recheck before In Progress.
+            If any check fails: SKIP WITHOUT MODIFICATION.
+
+            First make a separate feature branch from a fresh
+            fetch of the actual default branch (origin/master).
+            Delegate source/tests to feature-builder (GLM-5.3).
+            Execute actual project tests. If verified, open
+            a DRAFT PR with Factory Engine: opencode and
+            Jira key in the description.
+
+            Then invoke a NEW pr-reviewer (Kimi K3) on
+            the actual published GitHub PR diff, not only
+            a local diff or the builder's summary. If
+            CHANGES_REQUESTED, ask the original builder
+            to correct the SAME branch/PR and re-review
+            (max 3 rounds). Never self-approve.
+
+            Transition Jira to Human Review ONLY after
+            reviewer PASS on latest PR HEAD and actual
+            checks PASS. Otherwise report BLOCKED or
+            leave AI Review with an explicit reason.
+
+            NEVER merge, deploy or change another issue.

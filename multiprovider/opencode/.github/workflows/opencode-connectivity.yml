@@ -1,0 +1,127 @@
+name: OpenCode - Connectivity Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  connectivity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.0
+
+      - name: Install OpenCode
+        run: |
+          npm install -g opencode-ai
+          opencode --version
+
+      - name: Check Jira credentials
+        env:
+          JIRA_URL: ${{ vars.JIRA_URL }}
+          JIRA_PROJECT_KEY: ${{ vars.JIRA_PROJECT_KEY }}
+          JIRA_USERNAME: ${{ secrets.JIRA_USERNAME }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          curl --fail --silent --show-error \
+            --user "$JIRA_USERNAME:$JIRA_API_TOKEN" \
+            "$JIRA_URL/rest/api/3/myself" \
+            --output /dev/null
+
+          curl --fail --silent --show-error \
+            --user "$JIRA_USERNAME:$JIRA_API_TOKEN" \
+            "$JIRA_URL/rest/api/3/project/$JIRA_PROJECT_KEY" \
+            --output /dev/null
+
+          echo "Jira credentials and project access OK"
+
+      - name: Check Jira MCP
+        env:
+          JIRA_URL: ${{ vars.JIRA_URL }}
+          JIRA_PROJECT_KEY: ${{ vars.JIRA_PROJECT_KEY }}
+          JIRA_USERNAME: ${{ secrets.JIRA_USERNAME }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          uvx mcp-atlassian --help > /dev/null
+          opencode mcp list
+
+      - name: Check OpenCode Go
+        env:
+          OPENCODE_GO_API_KEY: ${{ secrets.OPENCODE_GO_API_KEY }}
+          OPENCODE_CONFIG_CONTENT: '{"provider":{"opencode-go":{"options":{"apiKey":"{env:OPENCODE_GO_API_KEY}"}}}}'
+        run: |
+          set -euo pipefail
+
+          opencode run \
+            --agent plan \
+            --model opencode-go/kimi-k3 \
+            "Responde solamente OK. No uses herramientas ni modifiques archivos."
+
+      - name: Read Jira using Kimi (READ ONLY)
+        env:
+          OPENCODE_GO_API_KEY: ${{ secrets.OPENCODE_GO_API_KEY }}
+          JIRA_URL: ${{ vars.JIRA_URL }}
+          JIRA_PROJECT_KEY: ${{ vars.JIRA_PROJECT_KEY }}
+          JIRA_USERNAME: ${{ secrets.JIRA_USERNAME }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          OPENCODE_CONFIG_CONTENT: >-
+            {
+              "provider": {
+                "opencode-go": {
+                  "options": {
+                    "apiKey": "{env:OPENCODE_GO_API_KEY}"
+                  }
+                }
+              },
+              "mcp": {
+                "jira": {
+                  "type": "local",
+                  "command": ["uvx", "mcp-atlassian"],
+                  "enabled": true,
+                  "timeout": 30000,
+                  "environment": {
+                    "JIRA_URL": "{env:JIRA_URL}",
+                    "JIRA_USERNAME": "{env:JIRA_USERNAME}",
+                    "JIRA_API_TOKEN": "{env:JIRA_API_TOKEN}",
+                    "JIRA_PROJECTS_FILTER": "{env:JIRA_PROJECT_KEY}",
+                    "READ_ONLY_MODE": "true",
+                    "ENABLED_TOOLS": "jira_search,jira_get_issue"
+                  }
+                }
+              },
+              "permission": {
+                "edit": "deny",
+                "bash": "deny",
+                "task": "deny"
+              }
+            }
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          opencode run \
+            --agent plan \
+            --model opencode-go/kimi-k3 \
+            --format json \
+            "Consulta Jira EXCLUSIVAMENTE con sus herramientas MCP. Busca UNA issue del proyecto ${JIRA_PROJECT_KEY} con jira_search, usando JQL: project = ${JIRA_PROJECT_KEY} ORDER BY Rank ASC. Luego usa jira_get_issue sobre la clave obtenida. Devuelve únicamente clave, estado, número de enlaces/dependencias visibles y si las llamadas MCP tuvieron éxito. No escribas archivos ni modifiques Jira. Si fallan las herramientas, indica ERROR_MCP y el error; nunca inventes un resultado." \
+            > /tmp/jira-mcp-events.jsonl
+
+          # Evita volcar descripciones completas de tickets a los logs.
+          echo "OpenCode finalizó. Revisa los eventos MCP en el artifact si es necesario."
+          echo "Eventos que contienen identificadores Jira MCP:"
+          grep -oE 'jira_search|jira_get_issue' /tmp/jira-mcp-events.jsonl \
+            | sort -u || true
+
+          # La ejecución por sí sola NO acredita las dos llamadas.
+          # Comprueba tool-calls y sus respuestas reales en el JSONL local.

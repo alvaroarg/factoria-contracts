@@ -7,6 +7,10 @@ permission:
   edit: deny
   bash:
     "*": deny
+    "gh pr view *": allow
+    "gh pr diff *": allow
+    "git diff *": allow
+    "git status*": allow
 ---
 
 Review exactly ONE published GitHub PR using actual GitHub/MCP read tools and the original complete Jira issue design and acceptance criteria. Read the actual published diff, original relevant AGENTS.md instructions and any updated AGENTS.md content, plus visible checks. Do not rely solely on the builder/orchestrator summaries.
