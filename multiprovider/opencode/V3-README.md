@@ -9,7 +9,7 @@ La última ejecución de OpenCode agotó una ventana de cuota sin una sola edici
 | Rol | Modelo | Archivo | `steps` |
 |---|---|---|---:|
 | Orquestador | **Kimi K3** | `.opencode/agents/factory-orchestrator.md` | 40 |
-| Builder | **DeepSeek V4 Pro** | `.opencode/agents/feature-builder.md` | 30 |
+| Builder | **DeepSeek V4 Pro** | `.opencode/agents/feature-builder.md` | 80 |
 | Reviewer | **Kimi K3** | `.opencode/agents/pr-reviewer.md` | 15 |
 
 IDs exactos: `opencode-go/kimi-k3` y `opencode-go/deepseek-v4-pro`.
@@ -25,8 +25,8 @@ IDs exactos: `opencode-go/kimi-k3` y `opencode-go/deepseek-v4-pro`.
 - `opencode.json` fija `default_agent: factory-orchestrator`; la CLI recibe también `--agent factory-orchestrator` explícito.
 - `check_config.py` falla ANTES DE INFERENCIA si falta cualquiera de los tres agentes, no coincide su modelo o modo, no está el agente en `opencode agent list`, o no figuran los IDs en `opencode models opencode-go`.
 - `jira_gate.py` verifica Jira mediante REST, **sin llamar a un modelo**: `Ready`, etiquetas exclusivas, `Repository: owner/repo` o campo definido, blockers actuales en `Done`, rama/PR no duplicadas. Si la issue no está exactamente en el estado Ready configurado, **falla**; nunca mueve estados por su cuenta ni recupera sesiones antiguas.
-- Builder `steps:30`, orquestador `steps:40`, reviewer `steps:15`. El requisito de editar antes de 10 pasos es **un contrato de prompt**, NO un límite de tokens garantizado.
-- `guarded_run.py` es un watchdog externo: **360 segundos desde iniciar OpenCode sin ningún diff de source/tests ⇒ detener todo el grupo de procesos**; tiempo total máximo 1800 segundos; corte adicional al detectar 800.000 tokens de entrada INFORMADOS por el stream JSON; timeout del job 35 min; respuesta 429 observable ⇒ parada sin retry. Si la salida JSON no incluye un evento de uso, no inventa cifras de tokens.
+- Builder `steps:80`, orquestador `steps:40`, reviewer `steps:15`. El requisito de editar antes de 10 pasos es **un contrato de prompt**, NO un límite de tokens garantizado.
+- `guarded_run.py` es un watchdog externo: **360 segundos desde iniciar OpenCode sin ningún diff de source/tests ⇒ detener todo el grupo de procesos**; tiempo total máximo 2700 segundos; corte adicional al detectar 800.000 tokens de entrada INFORMADOS por el stream JSON; timeout del job 50 min; respuesta 429 observable ⇒ parada sin retry. Si la salida JSON no incluye un evento de uso, no inventa cifras de tokens.
 - `postflight.py` exige Draft PR verdadera, marcador de engine/issue, comentario de PASS con HEAD exacto y Jira realmente en Human Review. **Un marcador escrito por un agente no demuestra por sí solo que haya existido una review independiente:** hay que cotejar logs y diff de GitHub antes de dar el piloto por validado.
 - Jira MCP recortado a cinco herramientas; NO implica aislamiento de permisos. La cuenta Jira debe tener privilegios mínimos.
 

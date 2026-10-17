@@ -14,7 +14,7 @@ spec.loader.exec_module(mod)
 class CheckConfigTests(unittest.TestCase):
     def test_expected_models(self):
         self.assertEqual(mod.AGENTS['factory-orchestrator'], ('primary', 'opencode-go/kimi-k3', 40))
-        self.assertEqual(mod.AGENTS['feature-builder'], ('subagent', 'opencode-go/deepseek-v4-pro', 30))
+        self.assertEqual(mod.AGENTS['feature-builder'], ('subagent', 'opencode-go/deepseek-v4-pro', 80))
         self.assertEqual(mod.AGENTS['pr-reviewer'], ('subagent', 'opencode-go/kimi-k3', 15))
 
     def test_agent_files_match_expectations(self):

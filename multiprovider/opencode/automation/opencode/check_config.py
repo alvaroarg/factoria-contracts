@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path.cwd()
 AGENTS = {
     "factory-orchestrator": ("primary", "opencode-go/kimi-k3", 40),
-    "feature-builder": ("subagent", "opencode-go/deepseek-v4-pro", 30),
+    "feature-builder": ("subagent", "opencode-go/deepseek-v4-pro", 80),
     "pr-reviewer": ("subagent", "opencode-go/kimi-k3", 15),
 }
 
@@ -58,7 +58,7 @@ def main():
             raise ValueError(f"Model {model} unavailable; do not auto substitute")
     if not os.environ.get("OPENCODE_GO_API_KEY"):
         raise ValueError("OPENCODE_GO_API_KEY missing")
-    print("CONFIG_OK: factory-orchestrator primary Kimi K3 (40), feature-builder DeepSeek V4 Pro (30), pr-reviewer Kimi K3 (15); models listed; no inference call")
+    print("CONFIG_OK: factory-orchestrator primary Kimi K3 (40), feature-builder DeepSeek V4 Pro (80), pr-reviewer Kimi K3 (15); models listed; no inference call")
     return 0
 
 if __name__ == "__main__":
