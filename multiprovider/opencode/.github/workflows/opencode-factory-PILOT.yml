@@ -1,0 +1,44 @@
+name: OpenCode Factory PILOT (manual until auth validated)
+
+# This is a pilot skeleton. It is disabled by default; enable only AFTER
+# verifying headless OpenCode Go AND Jira MCP credentials, model and permissions.
+# For an unattended daily run, add `schedule` after the pilot passes.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: opencode-factory-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  opencode:
+    if: ${{ vars.ENABLE_OPENCODE_FACTORY_PILOT == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Run OpenCode official GitHub action
+        uses: anomalyco/opencode/github@latest
+        env:
+          # TODO: verify provider Go key injection into official action.
+          # A secret env var ALONE may not authenticate OpenCode Go.
+          OPENCODE_GO_API_KEY: ${{ secrets.OPENCODE_GO_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          use_github_token: true
+          model: opencode-go/kimi-k3
+          agent: factory-orchestrator
+          share: false
+          prompt: |
+            Execute ONE batch PILOT of ONE eligible Jira issue for this
+            repository, using your factory-orchestrator contract.
+            Only engine-opencode; require every Jira blocker status Done.
+            If Jira MCP, provider credentials or tools are unavailable,
+            stop without editing or creating a PR.
