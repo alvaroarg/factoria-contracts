@@ -17,10 +17,13 @@ Do not activate the daily schedule until the first small controlled test has pas
 | Independent reviewer | PR exists and contains real published diff | Fresh pr-reviewer returns verdict referencing real diff/commit |
 | Review fixes | Reviewer requests specific source changes | Original builder/branch, same PR, new fresh reviewer, <=3 rounds |
 | AGENTS.md | Durable repo convention changed | Parent orchestrator edits existing AGENTS.md in SAME PR and reviewer reviews it |
-| Shared checkout | Cloud Automation cannot isolate parallel writable subagents | BATCH_LIMIT=1, report PARALLELISM_UNVERIFIED |
-| True parallel | Three eligible, isolated copies + publication/resume confirmed | 3 builders launched before first completion; 3 independent PRs + reviews |
+| Worktree failure | `git worktree add` or its verification fails for one of the issues | That issue `CONFIG_BLOCKED`, no builder for it; the others continue |
+| Parent checkout dirty | A builder wrote into the parent checkout (`git status --porcelain` not empty after it returns) | Affected issue `BLOCKED`, nothing published from the parent checkout |
+| True parallel | Three eligible issues | 3 orchestrator-created, verified worktrees from the same `BASE_COMMIT`; 3 builders launched before first completion; 3 independent PRs + reviews; report `CONCURRENCY: PARALLEL` with the real count |
+| Fewer than 3 | One or two eligible issues | Same flow with 1 or 2 worktrees/builders; real count reported |
+| Private repo review | PR in a private repo, reviewer read-only | Orchestrator fetches `pull/<N>/head` with authenticated git and passes the diff file; reviewer verdict cites that `HEAD_COMMIT`, no 404 |
 | Collision | A and B edit same path on separate branches | Both PRs kept; user owns conflicts |
 | Run overlap | Previous Cursor run still active | Do not duplicate issue/PR; exit or skip with evidence |
 | Final status | Review PASS on latest PR commit, tests successful | Human Review only; PR remains Draft, no Done/merge |
 
-**Important:** Jira status updates and engine labels are application-level safeguards; they are NOT atomic distributed locks. Observe actual run logs. Start `BATCH_LIMIT=1` until Cloud Automation isolation and reviewer support are verified, then enable 3 by proof, not assumption.
+**Important:** Jira status updates and engine labels are application-level safeguards; they are NOT atomic distributed locks. Observe actual run logs. `BATCH_LIMIT=3`: isolation is proven in each run by the orchestrator creating and verifying one worktree per issue; check the run log for those verifications and for the parent-checkout `git status --porcelain` checks.
