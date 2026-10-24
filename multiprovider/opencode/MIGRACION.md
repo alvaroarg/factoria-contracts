@@ -15,7 +15,7 @@ Sustituye los tres archivos `.opencode/agents/*.md` por los del ZIP. No se trata
 A partir del archivo ya funcional de Jira, incorpora:
 
 - `"default_agent": "factory-orchestrator"`.
-- `"model": "opencode-go/kimi-k3"` (orquestador y reviewer en Kimi K3; menos cupo en Go que K2.7 Code: ~15 $/mes frente a ~60 $).
+- `"model": "opencode-go/kimi-k3.1-pro"` (modelo por defecto: orquestador y reviewer en Kimi K3.1 Pro; el builder es `opencode-go/deepseek-v4.1-flash` en su agente).
 - `"provider". "opencode-go". "options". "apiKey": "{env:OPENCODE_GO_API_KEY}"`.
 - `mcp.jira.environment` con los cinco `ENABLED_TOOLS`, `JIRA_PROJECTS_FILTER` y sin `READ_ONLY_MODE=true` para el piloto de transiciones.
 
@@ -78,7 +78,7 @@ No escribas secrets en `opencode.json` ni en commits. **Use balance OFF** en Ope
 
 Como antes: Actions → workflow → Run workflow, y ya. `issue_key` vacío = selección automática de la primera story elegible; `mode` por defecto `build` (una ejecución vigilada).
 
-Recomendado la primera vez: `mode=inspect` (con o sin `issue_key`) para ver qué story elegiría, sin gastar tokens de OpenCode Go (solo llamadas normales a Jira/GitHub). Ante `GATE_BLOCKED`, corrige solo el problema indicado; no repitas a ciegas. Después `mode=build`: **una sola issue** por run. Observa los logs; no habilites Schedule ni tres builders.
+Recomendado la primera vez: `mode=inspect` (con o sin `issue_key`) para ver qué story elegiría, sin gastar tokens de OpenCode Go (solo llamadas normales a Jira/GitHub). Ante `GATE_BLOCKED`, corrige solo el problema indicado; no repitas a ciegas. Después `mode=build`: **una sola issue** por run. Observa los logs; no añadas un segundo Schedule ni tres builders. El workflow ya incluye el cron diario `0 23 * * *` (00:00 Europe/Madrid en invierno, CET; en verano, CEST, sería `0 22 * * *`).
 
 ## 7. Sobre el watchdog
 

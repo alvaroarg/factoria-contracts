@@ -1,7 +1,8 @@
 name: OpenCode Factory - bounded single issue
 
-# Deliberately manual. Zero configuration, like the previous pilot: no GitHub
+# Zero configuration, like the previous pilot: no GitHub
 # Variables to create, no issue_key required, no Jira story changes.
+# schedule (no inputs) uses the same defaults: mode=build and empty issue_key.
 #  - issue_key empty  => deterministic selection (REST/JQL, NO LLM) of the FIRST
 #    eligible story by Rank ASC; one issue per run; none => NO_WORK, green.
 #  - Ready = Listo and Done = Finalizada (same rule as the Claude/Cursor contracts).
@@ -9,6 +10,8 @@ name: OpenCode Factory - bounded single issue
 #  - ENABLE_OPENCODE_FACTORY_PILOT is OPTIONAL: only the literal value 'false'
 #    acts as a kill switch for build; unset => runs normally.
 on:
+  schedule:
+    - cron: '0 23 * * *' # 00:00 Europe/Madrid en invierno (CET); en verano (CEST) sería '0 22 * * *'
   workflow_dispatch:
     inputs:
       issue_key:
@@ -91,15 +94,15 @@ jobs:
         id: gate
         shell: bash
         env:
-          MODE: ${{ inputs.mode }}
-          ISSUE_KEY: ${{ inputs.issue_key }}
+          MODE: ${{ github.event_name == 'schedule' && 'build' || github.event.inputs.mode }}
+          ISSUE_KEY: ${{ github.event_name == 'schedule' && '' || github.event.inputs.issue_key }}
         run: |
           set -euo pipefail
           # Empty ISSUE_KEY => deterministic auto-selection (no LLM). NO_WORK exits 0.
           python automation/opencode/jira_gate.py --issue "$ISSUE_KEY" --mode "$MODE"
 
       - name: Optional kill switch (only when the variable is literally 'false')
-        if: ${{ inputs.mode == 'build' && steps.gate.outputs.has_work == 'true' }}
+        if: ${{ (github.event_name == 'schedule' || github.event.inputs.mode == 'build') && steps.gate.outputs.has_work == 'true' }}
         shell: bash
         env:
           ENABLE_PILOT: ${{ vars.ENABLE_OPENCODE_FACTORY_PILOT }}
@@ -113,7 +116,7 @@ jobs:
 
       - name: Prepare dedicated feature branch (NO LLM)
         id: branch
-        if: ${{ inputs.mode == 'build' && steps.gate.outputs.has_work == 'true' }}
+        if: ${{ (github.event_name == 'schedule' || github.event.inputs.mode == 'build') && steps.gate.outputs.has_work == 'true' }}
         shell: bash
         env:
           BRANCH: ${{ steps.gate.outputs.branch }}
@@ -135,8 +138,8 @@ jobs:
           echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
           echo "Prepared $BRANCH from freshly fetched origin/$DEFAULT_BRANCH ($BASE_SHA)"
 
-      - name: One guarded Kimi K3 + DeepSeek V4 Pro + Kimi K3 execution
-        if: ${{ inputs.mode == 'build' && steps.gate.outputs.has_work == 'true' }}
+      - name: One guarded Kimi K3.1 Pro + DeepSeek V4.1 Flash + Kimi K3.1 Pro execution
+        if: ${{ (github.event_name == 'schedule' || github.event.inputs.mode == 'build') && steps.gate.outputs.has_work == 'true' }}
         shell: bash
         env:
           ISSUE_KEY: ${{ steps.gate.outputs.issue }}
@@ -193,7 +196,7 @@ jobs:
           retention-days: 7
 
       - name: Verify published Draft PR, reviewer marker and Jira (READ ONLY)
-        if: ${{ inputs.mode == 'build' && steps.gate.outputs.has_work == 'true' }}
+        if: ${{ (github.event_name == 'schedule' || github.event.inputs.mode == 'build') && steps.gate.outputs.has_work == 'true' }}
         shell: bash
         env:
           ISSUE_KEY: ${{ steps.gate.outputs.issue }}
@@ -202,7 +205,7 @@ jobs:
           python automation/opencode/postflight.py --issue "$ISSUE_KEY"
 
       - name: Upload sanitized execution summary (NO raw LLM/Jira logs)
-        if: ${{ always() && inputs.mode == 'build' && steps.gate.outputs.has_work == 'true' }}
+        if: ${{ always() && (github.event_name == 'schedule' || github.event.inputs.mode == 'build') && steps.gate.outputs.has_work == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: opencode-factory-summary

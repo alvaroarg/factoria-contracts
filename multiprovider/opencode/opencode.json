@@ -1,7 +1,7 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "default_agent": "factory-orchestrator",
-  "model": "opencode-go/kimi-k3",
+  "model": "opencode-go/kimi-k3.1-pro",
   "share": "disabled",
   "provider": {
     "opencode-go": {

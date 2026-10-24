@@ -60,7 +60,7 @@ jobs:
         uses: anomalyco/opencode/github@latest
         with:
           use_github_token: true
-          model: opencode-go/kimi-k3
+          model: opencode-go/kimi-k3.1-pro
           agent: factory-orchestrator
           share: false
           prompt: |
@@ -96,12 +96,12 @@ jobs:
 
             First make a separate feature branch from a fresh
             fetch of the actual default branch (origin/master).
-            Delegate source/tests to feature-builder (GLM-5.3).
+            Delegate source/tests to feature-builder (DeepSeek V4.1 Flash).
             Execute actual project tests. If verified, open
             a DRAFT PR with Factory Engine: opencode and
             Jira key in the description.
 
-            Then invoke a NEW pr-reviewer (Kimi K3) on
+            Then invoke a NEW pr-reviewer (Kimi K3.1 Pro) on
             the actual published GitHub PR diff, not only
             a local diff or the builder's summary. If
             CHANGES_REQUESTED, ask the original builder

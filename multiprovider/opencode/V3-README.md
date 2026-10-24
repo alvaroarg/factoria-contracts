@@ -1,6 +1,6 @@
-# OpenCode Go — factoría v3 (DeepSeek V4 Pro + Kimi K3, con control de cuota)
+# OpenCode Go — factoría v3 (DeepSeek V4.1 Flash + Kimi K3.1 Pro, con control de cuota)
 
-**Fecha:** 17 de octubre de 2026. **Estado:** paquete revisado y probado LOCALMENTE (validación estática y pruebas unitarias); **NO probado con la cuenta Go, el Jira y GitHub reales del usuario**. Es un **piloto manual de UNA issue**. No tiene cron ni paralelismo triple. No sustituye Claude ni Cursor.
+**Fecha:** 24 de octubre de 2026. **Estado:** paquete revisado y probado LOCALMENTE (validación estática y pruebas unitarias); **NO probado con la cuenta Go, el Jira y GitHub reales del usuario**. Es un **piloto de UNA issue**. Cron diario `0 23 * * *` (00:00 Europe/Madrid en invierno, CET; en verano, CEST, sería `0 22 * * *`). No tiene paralelismo triple. No sustituye Claude ni Cursor.
 
 ## Qué cambia respecto al paquete anterior
 
@@ -8,13 +8,15 @@ La última ejecución de OpenCode agotó una ventana de cuota sin una sola edici
 
 | Rol | Modelo | Archivo | `steps` |
 |---|---|---|---:|
-| Orquestador | **Kimi K3** | `.opencode/agents/factory-orchestrator.md` | 40 |
-| Builder | **DeepSeek V4 Pro** | `.opencode/agents/feature-builder.md` | sin límite (sin clave `steps`) |
-| Reviewer | **Kimi K3** | `.opencode/agents/pr-reviewer.md` | 15 |
+| Orquestador | **Kimi K3.1 Pro** | `.opencode/agents/factory-orchestrator.md` | 40 |
+| Builder | **DeepSeek V4.1 Flash** | `.opencode/agents/feature-builder.md` | sin límite (sin clave `steps`) |
+| Reviewer | **Kimi K3.1 Pro** | `.opencode/agents/pr-reviewer.md` | 15 |
 
-IDs exactos: `opencode-go/kimi-k3` y `opencode-go/deepseek-v4-pro`.
+IDs exactos: `opencode-go/kimi-k3.1-pro` y `opencode-go/deepseek-v4.1-flash`.
 
-> **Cambio de Álvaro (17/10/2026):** orquestador y reviewer pasan de Kimi K2.7 Code a **Kimi K3** (`opencode-go/kimi-k3`); el builder sigue siendo DeepSeek V4 Pro. **Ojo con la cuota:** en OpenCode Go, Kimi K3 tiene bastante menos cupo que K2.7 Code (equivale a unos **15 $ al mes** de uso frente a **60 $** de K2.7 Code). Con K3 en dos roles, la ventana de 5 horas se agota antes: vigila la consola Go en el primer piloto y mantén **Use balance desactivado**.
+> **Cambio (24/10/2026):** orquestador y reviewer pasan a **Kimi K3.1 Pro** (`opencode-go/kimi-k3.1-pro`); el builder pasa de DeepSeek V4 Pro a **DeepSeek V4.1 Flash** (`opencode-go/deepseek-v4.1-flash`). El builder sigue **sin clave `steps`**. Horario del run: `cron: '0 23 * * *'` (00:00 Europe/Madrid en invierno, CET; en verano, CEST, sería `'0 22 * * *'`). Sigue siendo una issue por run. Mantén **Use balance desactivado**.
+
+> **Histórico (17/10/2026):** orquestador y reviewer pasaron de Kimi K2.7 Code a **Kimi K3** (`opencode-go/kimi-k3`); el builder era DeepSeek V4 Pro. En OpenCode Go, Kimi K3 tenía bastante menos cupo que K2.7 Code (unos **15 $ al mes** de uso frente a **60 $** de K2.7 Code). Esa nota de cupo describe a Kimi K3, no a Kimi K3.1 Pro.
 
 > **Equivalencias del tablero KAN (obligatorias):** Ready = **Listo**, Done = **Finalizada** (In Progress = En curso). Es la misma regla que el contrato de Claude (`multiprovider/claude/01-jira-three-parallel-STRICT-ROUTING.md`, "Localized status names") y el de Cursor: cualquier otro nombre no es Ready/Done, y `JIRA_READY_STATUS`/`JIRA_DONE_STATUS` ya no amplían la lista. **No hace falta configurar nada:** sin variables nuevas, sin `issue_key` obligatorio y sin cambiar las stories de Jira (repo por defecto = el del workflow; se aceptan `Repository:`, `Repositorio:` y `Repositorio destino:`). Las ramas de feature se crean siempre desde un **fetch fresco de `origin/master`**.
 
@@ -47,7 +49,7 @@ repo/                              # copiar/combinar en la raíz de UN repositor
     feature-builder.md
     pr-reviewer.md
   .github/workflows/
-    opencode-factory.yml           # solo workflow_dispatch; NO cron
+    opencode-factory.yml           # cron '0 23 * * *' (00:00 Europe/Madrid en invierno) + workflow_dispatch
   automation/opencode/
     check_config.py               # cero tokens, valida agentes y modelos
     jira_gate.py                  # cero tokens, lectura REST Jira + GitHub

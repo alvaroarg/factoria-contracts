@@ -9,11 +9,11 @@ from pathlib import Path
 
 ROOT = Path.cwd()
 AGENTS = {
-    "factory-orchestrator": ("primary", "opencode-go/kimi-k3", 40),
+    "factory-orchestrator": ("primary", "opencode-go/kimi-k3.1-pro", 40),
     # None = no `steps` key: OpenCode then iterates without a step limit
     # (bounded externally by guarded_run.py time/no-edit/token caps).
-    "feature-builder": ("subagent", "opencode-go/deepseek-v4-pro", None),
-    "pr-reviewer": ("subagent", "opencode-go/kimi-k3", 15),
+    "feature-builder": ("subagent", "opencode-go/deepseek-v4.1-flash", None),
+    "pr-reviewer": ("subagent", "opencode-go/kimi-k3.1-pro", 15),
 }
 
 
@@ -64,7 +64,7 @@ def main():
             raise ValueError(f"Model {model} unavailable; do not auto substitute")
     if not os.environ.get("OPENCODE_GO_API_KEY"):
         raise ValueError("OPENCODE_GO_API_KEY missing")
-    print("CONFIG_OK: factory-orchestrator primary Kimi K3 (40), feature-builder DeepSeek V4 Pro (no step limit), pr-reviewer Kimi K3 (15); models listed; no inference call")
+    print("CONFIG_OK: factory-orchestrator primary Kimi K3.1 Pro (40), feature-builder DeepSeek V4.1 Flash (no step limit), pr-reviewer Kimi K3.1 Pro (15); models listed; no inference call")
     return 0
 
 if __name__ == "__main__":
