@@ -13,14 +13,14 @@ The feature branch must come from a FRESH fetch of
 origin/master (git fetch origin master; branch from origin/master), never from
 a stale local master or another branch; verify the runner's base SHA.
 
-Delegate source/test editing to feature-builder (DeepSeek V4 Pro) ONE TIME.
+Delegate source/test editing to feature-builder (DeepSeek V4.1 Flash) ONE TIME.
 Give it relevant files, approved spec and instructions to EDIT within 10 steps.
 Never launch a fresh replacement builder if the first produces no diff.
 The external guard will stop the run if there is no source/test edit within
 its initial deadline, or at the absolute timeout. Do not work around it.
 
 Publish ONE Draft PR, then obtain one independent published-diff pr-reviewer
-(Kimi K3) verdict. On PASS at current head with real passing tests,
+(Kimi K3.1 Pro) verdict. On PASS at current head with real passing tests,
 comment with EXACT literal markers on the PR:
 Factory Review: PASS
 Factory Review Head: <CURRENT PR HEAD SHA>

@@ -8,7 +8,7 @@
 2. (Recomendado) Lanzar `mode=inspect` con `issue_key` vacío o `KAN-9`, **sin LLM y sin cambios en Jira**. No hace falta crear variables ni editar la story. El gate comprueba `Ready`/`Listo`, las etiquetas `agent-ready` + `engine-opencode`, el repo (por defecto el del workflow), los blockers en `Done`/`Finalizada` y la inexistencia de ramas/PR previas.
 3. Si `inspect` devuelve `GATE_BLOCKED`, corregir únicamente la causa identificada. **No hacer otra transición de Jira si ya está Ready.**
 4. Comprobar que hay cuota Go disponible y `Use balance` desactivado.
-5. Ejecutar `mode=build` una única vez (no hace falta `ENABLE_OPENCODE_FACTORY_PILOT`; solo si existe con valor `false` bloquea). El builder será DeepSeek V4 Pro; no se reaprovecha contexto de GLM.
+5. Ejecutar `mode=build` una única vez (no hace falta `ENABLE_OPENCODE_FACTORY_PILOT`; solo si existe con valor `false` bloquea). El builder será DeepSeek V4.1 Flash; no se reaprovecha contexto de GLM.
 
 **La ejecución fallida solo se conserva como evidencia histórica para evitar repetir el incidente; no es fuente de estado operativo.**
 
@@ -16,9 +16,9 @@
 
 | Caso | Ejecución | Resultado correcto |
 |---|---|---|
-| Agente `factory-orchestrator` ausente | `inspect` | CONFIG_BLOCKED **sin llamar a Kimi K3** |
+| Agente `factory-orchestrator` ausente | `inspect` | CONFIG_BLOCKED **sin llamar a Kimi K3.1 Pro** |
 | Builder todavía GLM | `inspect` | CONFIG_BLOCKED por modelo incompatible |
-| DeepSeek V4 Pro ausente en catálogo Go | `inspect` | CONFIG_BLOCKED sin sustituto automático |
+| DeepSeek V4.1 Flash ausente en catálogo Go | `inspect` | CONFIG_BLOCKED sin sustituto automático |
 | Sin `OPENCODE_GO_API_KEY` | `inspect` | CONFIG_BLOCKED |
 | Jira sin `engine-opencode` exclusivo | `inspect` | GATE_BLOCKED |
 | Jira en `En curso` / In Progress | `inspect` | GATE_BLOCKED; nunca reabrir automáticamente |
@@ -43,7 +43,7 @@
 
 ## Diagnóstico de eventos
 
-El watchdog guarda JSON bruto (potencialmente sensible) sólo en `$RUNNER_TEMP` de ese job y NO lo sube como artifact. Publica un resumen sin specs/tokens. Los eventos `task` pueden no emitirse idénticamente para todas las versiones de OpenCode; su ausencia en el resumen NO demuestra que no haya subagentes. Verifica en la sesión OpenCode que se llamó a DeepSeek una única vez y a un nuevo Kimi K3 para review. El flujo no merece considerarse validado hasta tener prueba externa de esas identidades.
+El watchdog guarda JSON bruto (potencialmente sensible) sólo en `$RUNNER_TEMP` de ese job y NO lo sube como artifact. Publica un resumen sin specs/tokens. Los eventos `task` pueden no emitirse idénticamente para todas las versiones de OpenCode; su ausencia en el resumen NO demuestra que no haya subagentes. Verifica en la sesión OpenCode que se llamó a DeepSeek V4.1 Flash una única vez y a un nuevo Kimi K3.1 Pro para review. El flujo no merece considerarse validado hasta tener prueba externa de esas identidades.
 
 ## Limites para volver a producción
 
@@ -51,4 +51,4 @@ El watchdog guarda JSON bruto (potencialmente sensible) sólo en `$RUNNER_TEMP` 
 - Consumo controlado: compara cuota antes/después en Console; no fiarse de estimaciones sólo por logs.
 - Hard stop temporal/no-progreso y `steps` para todos, pero ningún límite duro de tokens garantizado.
 - Revisar seguridad de GitHub Token, Jira API Token y CI que no se dispara tras PRs creadas por `GITHUB_TOKEN`.
-- Sólo después definir `schedule` y paralelismo; la próxima fase necesita reparto/aislamiento de ramas y runners, no basta con subir `BATCH_LIMIT`.
+- El `schedule` ya está definido: cron `0 23 * * *` (00:00 Europe/Madrid en invierno, CET; en verano, CEST, sería `0 22 * * *`). El paralelismo sigue fuera; la próxima fase necesita reparto/aislamiento de ramas y runners, no basta con subir `BATCH_LIMIT`.
