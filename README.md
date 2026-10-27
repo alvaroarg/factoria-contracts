@@ -160,11 +160,18 @@ Al repo de producto se copian los archivos del provider **con sus mismas rutas**
    | Variable | `JIRA_REPOSITORY_FIELD_ID`, `JIRA_DEPENDENCIES_FIELD_ID` | No | Solo si usas campos propios (ver `MIGRACION.md`) |
    | Variable | `ENABLE_OPENCODE_FACTORY_PILOT` | No | **Kill switch**: solo el valor literal `false` impide el build. Sin definir, corre con normalidad |
 
-   El `GITHUB_TOKEN` lo pone Actions. El job pide `contents`, `pull-requests` e `issues: write`. Activa *Settings → Actions → General → Workflow permissions → Allow GitHub Actions to create … pull requests*.
-3. En la consola de OpenCode Go, deja **Use balance desactivado**, para que un 429 por cuota no gaste crédito Zen.
-4. Haz commit y push. El workflow aparece como **Actions → «OpenCode Factory - bounded single issue»**.
-5. **Prueba sin gastar cuota:** *Run workflow* con `mode=inspect` y `issue_key` vacío, o con una key concreta. Esto valida la API key, que los modelos existen en `opencode models opencode-go`, los agentes y la elegibilidad en Jira **sin llamar al LLM ni tocar Jira**. Si no hay ninguna story elegible, termina en verde con `NO_WORK`.
-6. Después puedes lanzar `mode=build` a mano (es el modo por defecto) o esperar al cron diario de las 00:00 (Madrid, en invierno). Cada run procesa **una** story `engine-opencode`.
+   El `GITHUB_TOKEN` lo pone Actions. El job pide `contents`, `pull-requests` e `issues: write`.
+3. **OBLIGATORIO: dejar que GitHub Actions cree PRs.** En el repo de producto ve a **Settings → Actions → General → Workflow permissions**, marca **«Allow GitHub Actions to create and approve pull requests»** y pulsa **Save**.
+   - Si no lo haces, el run falla al crear el Draft PR con `GraphQL: GitHub Actions is not permitted to create or approve pull requests (createPullRequest)`. La rama se conserva, pero no se crea el PR, no se delega la revisión y Jira no pasa a Human Review.
+   - Los PRs creados con el `GITHUB_TOKEN` **no disparan otros workflows**, así que el CI del PR no se lanza.
+   - **Alternativas (opcionales; las dos exigen cambiar el workflow, y hoy ese cambio NO está hecho):**
+     - **(a) Fine-grained PAT** limitado al repo, con permisos *Contents* y *Pull requests* en read/write, guardado como secret (por ejemplo `FACTORY_GH_TOKEN`) y usado para `gh pr create`. Hay que renovar el token cuando caduque. Los PRs salen a tu nombre y **sí** disparan el CI.
+     - **(b) GitHub App propia** con [`actions/create-github-app-token`](https://github.com/actions/create-github-app-token). Los PRs los firma el bot, **sí** disparan el CI y no hay token que caduque. Necesita más preparación: crear e instalar la App y guardar dos secrets.
+   - **Recomendación:** empieza con el permiso de arriba. Pasa a la GitHub App (b) cuando quieras que el CI se ejecute en los PRs de la factoría.
+4. En la consola de OpenCode Go, deja **Use balance desactivado**, para que un 429 por cuota no gaste crédito Zen.
+5. Haz commit y push. El workflow aparece como **Actions → «OpenCode Factory - bounded single issue»**.
+6. **Prueba sin gastar cuota:** *Run workflow* con `mode=inspect` y `issue_key` vacío, o con una key concreta. Esto valida la API key, que los modelos existen en `opencode models opencode-go`, los agentes y la elegibilidad en Jira **sin llamar al LLM ni tocar Jira**. Si no hay ninguna story elegible, termina en verde con `NO_WORK`.
+7. Después puedes lanzar `mode=build` a mano (es el modo por defecto) o esperar al cron diario de las 00:00 (Madrid, en invierno). Cada run procesa **una** story `engine-opencode`.
 
 Para migrar desde paquetes anteriores, mira [`MIGRACION.md`](multiprovider/opencode/MIGRACION.md). La matriz de pruebas está en [`PRUEBAS-Y-ARRANQUE-LIMPIO.md`](multiprovider/opencode/PRUEBAS-Y-ARRANQUE-LIMPIO.md) y el detalle en [`V3-README.md`](multiprovider/opencode/V3-README.md).
 
@@ -186,6 +193,7 @@ Para migrar desde paquetes anteriores, mira [`MIGRACION.md`](multiprovider/openc
 | El reviewer de Cursor devuelve 404 o no ve el diff | En repos privados, el orquestador tiene que pasarle el diff autenticado (`git fetch origin pull/<N>/head`) en `.review/`. Vuelve a pegar el contrato v3 en la Automation. |
 | Cursor marca una story `CONFIG_BLOCKED` o `BLOCKED` por worktree | Falló `git worktree add` o su verificación, o un builder escribió en el checkout padre. Las demás stories siguen. |
 | Una story con blocker «mergeado» no arranca | Es lo esperado: el blocker tiene que estar en **Finalizada**, y eso lo pone el humano después del merge. |
+| El run falla al crear el Draft PR: `GraphQL: GitHub Actions is not permitted to create or approve pull requests (createPullRequest)` | Falta el permiso del repo. Ve a **Settings → Actions → General → Workflow permissions**, marca «Allow GitHub Actions to create and approve pull requests» y pulsa **Save** (paso 3 de OpenCode). La rama ya está en el remoto: comprueba que no haya quedado un PR a medias y relanza. Si la rama existente hace que el gate bloquee la story, bórrala o publica el PR a mano. |
 | Los PR creados por OpenCode no lanzan CI | Un PR abierto con el `GITHUB_TOKEN` de Actions puede no disparar otros workflows. No des el CI por aprobado sin checks reales. |
 
 ## Referencias
