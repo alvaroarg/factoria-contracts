@@ -9,6 +9,7 @@ Este repo guarda los **contratos, agentes y workflows** de la factoría. Lo que 
 - [Cómo funciona](#cómo-funciona)
 - [Providers](#providers)
 - [Reglas comunes](#reglas-comunes-todos-los-providers)
+- [Jira: funcionamiento e inyección de la tarea](#jira-cómo-funciona-y-cómo-llega-la-tarea-a-los-builders)
 - [Estructura de este repo](#estructura-de-este-repo)
 - [Guía de instalación](#guía-de-instalación-en-un-repo-de-producto)
   - [Claude](#1-claude-routine-diaria)
@@ -66,6 +67,89 @@ Notas:
 - **PRs:** siempre en **Draft**. Jira solo pasa a **Human Review** con un PASS del reviewer independiente en el HEAD actual del PR.
 - **Configuración cero en OpenCode:** no hay variables nuevas obligatorias ni `issue_key` obligatorio, y las stories no se tocan. Si una story no declara `Repository:`, `Repositorio:` o `Repositorio destino:`, se usa el repo del propio workflow, y una story que nombre otro repo se rechaza. El proyecto Jira por defecto es **`KAN`**. Cursor deduce `owner/repo` del entorno de la Automation. Claude exige que el repo de la story coincida con el de la Routine.
 - **Una sola ejecución por provider y repo.** El estado de Jira no es un lock atómico, así que los horarios deben ser distintos y no solaparse.
+
+## Jira: cómo funciona y cómo llega la tarea a los builders
+
+Jira es la **fuente de verdad** de la factoría. Ahí está la especificación aprobada, los criterios de aceptación, las dependencias, el repo destino, el Rank, el provider asignado y el estado. Todo sale de los contratos ([Claude](multiprovider/claude/01-jira-three-parallel-STRICT-ROUTING.md), [Cursor](multiprovider/cursor/01-scheduled-implement.md), [portable](multiprovider/contracts/PORTABLE-CONTRACT.md)) y, en OpenCode, de [`jira_gate.py`](multiprovider/opencode/automation/opencode/jira_gate.py), [`guarded_run.py`](multiprovider/opencode/automation/opencode/guarded_run.py) y [`pilot-prompt.md`](multiprovider/opencode/automation/opencode/pilot-prompt.md).
+
+```mermaid
+flowchart LR
+  A[Story en Listo<br/>agent-ready + engine-*] -->|Rank ASC, blockers en Finalizada| B[Orquestador]
+  B -->|In Progress| C[Builder<br/>rama desde origin/master]
+  C --> D[Draft PR]
+  D -->|AI Review| E[Reviewer nuevo<br/>diff publicado + spec]
+  E -->|CHANGES_REQUESTED| C
+  E -->|PASS en el HEAD| F[Human Review]
+  F -->|merge humano| G[Finalizada]
+```
+
+### Qué se lee de cada story
+
+| Dato | Dónde va | Quién lo usa |
+|---|---|---|
+| **Proyecto** | `KAN` (en OpenCode: `JIRA_PROJECT_KEY`; si no existe, el prefijo de la key; si tampoco, `KAN`) | Todos |
+| **Resumen** (`summary`) | Título | Todos. OpenCode lo reduce a 120 caracteres en el resultado del gate |
+| **Descripción** | Diseño técnico y funcional aprobado, **criterios de aceptación** y pruebas. No hay un campo propio para los criterios: van en la descripción | Todos. El gate de OpenCode **rechaza** descripciones de menos de 60 caracteres |
+| **Repositorio** | Línea `Repository: owner/repo` (OpenCode también acepta `Repositorio:` y `Repositorio destino:`) o un campo propio (`JIRA_REPOSITORY_FIELD_ID`) | OpenCode: si falta, usa el repo del workflow, y si nombra otro repo, la story se rechaza. Cursor: tiene que coincidir con el `owner/repo` de la Automation. Claude: la coincidencia del repo es obligatoria |
+| **Dependencias** | *Linked issues* `is blocked by` / `depends on`, una sección `Dependencies:` / `Dependencias:` en la descripción, frases como «blocked by», «depende de» o «bloqueado por», o un campo propio (`JIRA_DEPENDENCIES_FIELD_ID`) | Todos usan la unión de todas las fuentes. La dirección del enlace importa: lo que la story *bloquea* no es un prerequisito. Si el sentido es ambiguo, la story se salta |
+| **Routing (etiquetas)** | `agent-ready` + **una sola** de `engine-claude`, `engine-cursor` o `engine-opencode` | Cada provider solo coge la suya. Si hay cero o varias etiquetas engine, la saltan todos |
+| **Estado** | `status.name` | Solo cuenta Listo/Ready para elegir y Finalizada/Done para los blockers |
+
+### Estados y quién los mueve
+
+| Estado | Quién lo pone | Cuándo |
+|---|---|---|
+| **Listo** (Ready) | Humano | La story está diseñada, aprobada y etiquetada |
+| **In Progress** (En curso) | Orquestador | Después de volver a comprobar estado, etiquetas, repo y blockers, y antes de lanzar el builder. Comprueba que la transición se ha aplicado |
+| **AI Review** | Orquestador | Claude: justo antes de lanzar el reviewer. Cursor y OpenCode: cuando el Draft PR ya existe de verdad |
+| **Human Review** | Orquestador | Solo con un PASS del reviewer en el HEAD actual del PR y los tests en verde. OpenCode publica antes un comentario con los marcadores de review en el PR |
+| **Blocked** | Orquestador | Fallos: rondas de corrección agotadas, workspace perdido o review imposible. Cursor y OpenCode también pueden dejar la story en AI Review con el motivo |
+| **Finalizada** (Done) | **Humano** | Después del merge. Ningún agente la pone |
+
+- Las stories que se saltan (por blockers pendientes, otro engine u otro repo) **se quedan en Listo**. No se mueven a Blocked ni se llenan de comentarios.
+- **Los agentes no cambian el contenido de las stories.** Los contratos solo les permiten leer, hacer transiciones y comentar. Cursor prohíbe tocar la arquitectura aprobada y reasignar issues. En OpenCode, el MCP Atlassian solo expone `jira_search`, `jira_get_issue`, `jira_get_transitions`, `jira_transition_issue` y `jira_add_comment`. Esa lista filtra herramientas pero **no es una barrera de permisos**, así que la cuenta de Jira debe tener los permisos mínimos.
+- El gate de OpenCode (`jira_gate.py`) es de **solo lectura**: nunca mueve estados. Si la story no está en Listo/Ready, falla.
+
+### Selección
+
+- **Claude y Cursor:** el orquestador busca por MCP las stories en Listo + `agent-ready` ordenadas por `Rank ASC`. Lee el **detalle completo** de cada una (la JQL solo sirve como primer filtro) y toma las **3 primeras elegibles** (`BATCH_LIMIT=3`), siguiendo hacia abajo si se salta alguna. Comprueba los blockers dos veces: al elegir y justo antes de pasar a In Progress.
+- **OpenCode:** si `issue_key` está vacío, el **runner sin LLM** elige **una** story. Lanza por REST la JQL `project = "KAN" AND labels = "agent-ready" AND labels = "engine-opencode" AND statusCategory != Done ORDER BY Rank ASC`, sin filtrar el estado en la JQL, y valida candidata a candidata leyendo `summary`, `status`, `labels`, `description` e `issuelinks` (más los campos propios, si los hay). Se queda con la primera que pasa, siempre que no exista ya la rama `agent/<key>` ni un PR abierto. Si ninguna pasa, el resultado es `NO_WORK`. Después el orquestador vuelve a comprobarlo todo por MCP.
+
+### Inyección: qué recibe cada agente
+
+| | **Claude** | **Cursor** | **OpenCode** |
+|---|---|---|---|
+| Cómo lee Jira el orquestador | Jira/Atlassian MCP de la Routine | Jira MCP del entorno del Cloud Agent | El runner, por REST (`jira_gate.py`). El orquestador Kimi, por MCP `mcp-atlassian` |
+| Prompt del orquestador | El contrato pegado en la Routine | El contrato pegado en la Automation | `pilot-prompt.md`, donde `guarded_run.py` sustituye `__ISSUE_KEY__` y `__GITHUB_REPOSITORY__`, más el contrato `factory-orchestrator.md` |
+| **Brief al builder** | Key + URL de Jira, spec aprobada **congelada** y completa, criterios de aceptación, `owner/repo`, rama base, commit base y registro `DEPENDENCY_GATE` (`VERIFIED_ALL_DONE` / `VERIFIED_NO_BLOCKERS`). Sin ese registro, el builder devuelve BLOCKED | Spec completa + URL, criterios, repo, `BASE_COMMIT`, rama `cursor/<KEY>-<slug>`, **ruta absoluta del worktree** `/tmp/<KEY>-wt` y las instrucciones aplicables (AGENTS.md) | Key, spec aprobada relevante, criterios, rama `agent/<key>` (creada por el runner desde `origin/master`) y ubicación de los AGENTS.md. La orden es buscar acotado y editar en 10 pasos o menos |
+| Aislamiento del builder | Worktree propio (`isolation: worktree`) | Worktree creado y verificado por el orquestador | Checkout del runner en la rama de la story (una story por run) |
+| **Lo que recibe el reviewer** | El diff real del PR publicado, la spec de Jira y las convenciones del repo, incluidos los cambios en AGENTS.md | URL y número del PR, `BASE_COMMIT`, `HEAD_COMMIT`, **fichero `.review/pr-<N>-<HEAD>.diff`** obtenido con git autenticado, la ruta del worktree, el diseño original, la evidencia de tests y CI, y los cambios en AGENTS.md | Spec + URL de la issue y URL y HEAD del PR publicado. Lee el diff con `gh pr diff` / `gh pr view` y Jira con `jira_get_issue` / `jira_search`, todo en solo lectura |
+| **Lo que vuelve a GitHub y a Jira** | Draft PR con la URL de Jira, el mapeo de criterios, los tests, AGENTS.md y los riesgos. Informe factual en Jira y transición a Human Review | Draft PR con `Factory Engine: cursor` y `Factory Jira: <KEY>`, la URL de Jira, el mapeo de criterios y los tests. Informe en Jira (key, repo, rama, PR, tests, veredicto y HEAD, AGENTS.md, rondas) y transición | Draft PR con `Factory Engine: opencode` y `Factory Jira: <KEY>`. Al pasar a AI Review se apuntan el enlace y el HEAD. Comentario en el PR con `Factory Review: PASS` / `Factory Review Head: <sha>` / `Factory Reviewer: pr-reviewer` y paso a Human Review. `postflight.py` comprueba el PR, el marcador y el estado |
+
+### Ejemplo de story bien formada
+
+Etiquetas: `agent-ready`, `engine-opencode` (o `engine-claude` / `engine-cursor`). Estado: **Listo**. Si depende de otra story, añade también el enlace *is blocked by* en *Linked issues*. La plantilla sigue la de [`multiprovider/jira/ROUTING.md`](multiprovider/jira/ROUTING.md); la tarea es solo un ejemplo.
+
+```text
+Resumen: Añadir el campo «Código» como fallback del identificador de licitación
+
+Repository: alvaroarg/LicitacionesScrapping
+Dependencies: None            (o: KAN-12, KAN-13)
+Design approved: Yes (by human)
+
+Technical design:
+- Módulo/función afectados, qué cambia y qué no (sin decisiones abiertas).
+- Contratos de datos o interfaces afectadas.
+
+Acceptance criteria:
+- Dado X, cuando Y, entonces Z (verificable).
+- ...
+
+Testing:
+- Tests que hay que añadir o ajustar y comando para ejecutarlos (ver AGENTS.md).
+```
+
+Consejos: escribe nombres concretos de módulos y funciones (el builder de OpenCode busca con `rg` a partir de ellos), deja la descripción sin ambigüedades del tipo «pendiente» sin una key, y no pongas dos etiquetas `engine-*`.
 
 ## Estructura de este repo
 
