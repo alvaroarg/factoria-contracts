@@ -134,15 +134,15 @@ def main():
     prompt_file = Path("automation/opencode/pilot-prompt.md")
     prompt = prompt_file.read_text(encoding="utf-8").replace("__ISSUE_KEY__", issue)
     prompt = prompt.replace("__GITHUB_REPOSITORY__", os.environ["GITHUB_REPOSITORY"])
-    metrics = {"issue": issue, "agent": "factory-orchestrator", "builder_model": "opencode-go/deepseek-v4-pro",
-               "reviewer_model": "opencode-go/kimi-k3", "initial_change_seen": False,
+    metrics = {"issue": issue, "agent": "factory-orchestrator", "builder_model": "opencode-go/deepseek-v4.1-flash",
+               "reviewer_model": "opencode-go/kimi-k3.1-pro", "initial_change_seen": False,
                "changed_paths": [], "stop_reason": "", "exit_code": None, "seconds": 0,
                "event_types": {}, "tools": {}, "task_agents": [], "step_events": 0,
                "reported_tokens": {"input": 0, "output": 0, "reasoning": 0},
                "quota_error_observed": False, "unexpected_agent_observed": False}
     cmd = ["opencode", "run", "--agent", "factory-orchestrator", "--model",
-           "opencode-go/kimi-k3", "--format", "json", prompt]
-    print("LAUNCH: factory-orchestrator / Kimi K3; builder DeepSeek V4 Pro; ONE invocation; no automatic retry", flush=True)
+           "opencode-go/kimi-k3.1-pro", "--format", "json", prompt]
+    print("LAUNCH: factory-orchestrator / Kimi K3.1 Pro; builder DeepSeek V4.1 Flash; ONE invocation; no automatic retry", flush=True)
     q = queue.Queue()
     temp_dir = Path(os.environ.get("RUNNER_TEMP", "/tmp"))
     raw_file = temp_dir / ("opencode-" + issue.lower() + "-events.jsonl")

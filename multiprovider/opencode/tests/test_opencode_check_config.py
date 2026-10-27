@@ -13,9 +13,9 @@ spec.loader.exec_module(mod)
 
 class CheckConfigTests(unittest.TestCase):
     def test_expected_models(self):
-        self.assertEqual(mod.AGENTS['factory-orchestrator'], ('primary', 'opencode-go/kimi-k3', 40))
-        self.assertEqual(mod.AGENTS['feature-builder'], ('subagent', 'opencode-go/deepseek-v4-pro', None))
-        self.assertEqual(mod.AGENTS['pr-reviewer'], ('subagent', 'opencode-go/kimi-k3', 15))
+        self.assertEqual(mod.AGENTS['factory-orchestrator'], ('primary', 'opencode-go/kimi-k3.1-pro', 40))
+        self.assertEqual(mod.AGENTS['feature-builder'], ('subagent', 'opencode-go/deepseek-v4.1-flash', None))
+        self.assertEqual(mod.AGENTS['pr-reviewer'], ('subagent', 'opencode-go/kimi-k3.1-pro', 15))
 
     def test_agent_files_match_expectations(self):
         for name, (mode, model, steps) in mod.AGENTS.items():
@@ -42,7 +42,7 @@ class CheckConfigTests(unittest.TestCase):
     def test_opencode_json_defaults(self):
         cfg = json.loads((ROOT / 'opencode.json').read_text(encoding='utf-8'))
         self.assertEqual(cfg['default_agent'], 'factory-orchestrator')
-        self.assertEqual(cfg['model'], 'opencode-go/kimi-k3')
+        self.assertEqual(cfg['model'], 'opencode-go/kimi-k3.1-pro')
         self.assertIn('jira', cfg['mcp'])
 
 if __name__ == '__main__': unittest.main()

@@ -1,7 +1,7 @@
 ---
-description: Independent fresh Kimi K3 review of an already published Draft PR and original Jira spec; read-only, bounded to 15 steps.
+description: Independent fresh Kimi K3.1 Pro review of an already published Draft PR and original Jira spec; read-only, bounded to 15 steps.
 mode: subagent
-model: opencode-go/kimi-k3
+model: opencode-go/kimi-k3.1-pro
 temperature: 0.1
 steps: 15
 permission:

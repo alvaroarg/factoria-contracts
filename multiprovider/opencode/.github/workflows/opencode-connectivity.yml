@@ -65,10 +65,10 @@ jobs:
 
           opencode run \
             --agent plan \
-            --model opencode-go/kimi-k3 \
+            --model opencode-go/kimi-k3.1-pro \
             "Responde solamente OK. No uses herramientas ni modifiques archivos."
 
-      - name: Read Jira using Kimi (READ ONLY)
+      - name: Read Jira using Kimi K3.1 Pro (READ ONLY)
         env:
           OPENCODE_GO_API_KEY: ${{ secrets.OPENCODE_GO_API_KEY }}
           JIRA_URL: ${{ vars.JIRA_URL }}
@@ -112,7 +112,7 @@ jobs:
 
           opencode run \
             --agent plan \
-            --model opencode-go/kimi-k3 \
+            --model opencode-go/kimi-k3.1-pro \
             --format json \
             "Consulta Jira EXCLUSIVAMENTE con sus herramientas MCP. Busca UNA issue del proyecto ${JIRA_PROJECT_KEY} con jira_search, usando JQL: project = ${JIRA_PROJECT_KEY} ORDER BY Rank ASC. Luego usa jira_get_issue sobre la clave obtenida. Devuelve únicamente clave, estado, número de enlaces/dependencias visibles y si las llamadas MCP tuvieron éxito. No escribas archivos ni modifiques Jira. Si fallan las herramientas, indica ERROR_MCP y el error; nunca inventes un resultado." \
             > /tmp/jira-mcp-events.jsonl
