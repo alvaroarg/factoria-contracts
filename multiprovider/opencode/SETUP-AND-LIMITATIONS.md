@@ -2,7 +2,7 @@
 
 Official docs: https://opencode.ai/docs/github/ and https://opencode.ai/docs/go/
 
-OpenCode Go is a model SUBSCRIPTION/PROVIDER, NOT a hosted job scheduler. Use official GitHub Actions integration to run without a local computer. This first pilot processes ONE issue, not three. Parallel worktree/subagent isolation in OpenCode is NOT assumed to match Claude Code.
+OpenCode Go is a model SUBSCRIPTION/PROVIDER, NOT a hosted job scheduler. Use official GitHub Actions integration to run without a local computer. The v3 workflow processes up to 3 issues per run, each in its own GitHub-hosted job (not shared worktrees). Parallel worktree/subagent isolation inside one OpenCode process is NOT assumed to match Claude Code.
 
 ## Auth blocker that must be cleared before enabling
 1. Verify actual OpenCode Go CLI model names and your plan allowance. Model IDs: `opencode-go/kimi-k3.1-pro` orchestrator/reviewer, `opencode-go/deepseek-v4.1-flash` builder. Model availability/quotas change.
@@ -11,7 +11,7 @@ OpenCode Go is a model SUBSCRIPTION/PROVIDER, NOT a hosted job scheduler. Use of
 4. Install OpenCode official GitHub integration / GitHub App when appropriate, or use `use_github_token: true` as in provided pilot. Check repo branch protection and PR permissions.
 5. Copy `.opencode/agents/*.md` to the desired repo; do not remove existing AGENTS.md/Claude agents. Add the shared contract where orchestrator can read it (copy contracts/PORTABLE-CONTRACT.md to repo or inline the hard rules in orchestration prompt; hard rules are already in agent file).
 6. Save the pilot workflow as `.github/workflows/opencode-factory.yml`; set GitHub repository variable ENABLE_OPENCODE_FACTORY_PILOT=true only when BOTH auth paths are verified. Run `workflow_dispatch` to test ONE engine-opencode issue. The v3 workflow also has a daily schedule (see below); do not add a second one.
-7. After one real PR + independent review + Jira transition are proven, only then move from single-issue to isolated concurrent workers. The daily schedule is already `cron: '0 23 * * *'` (00:00 Europe/Madrid en invierno, CET; en verano, CEST, sería `'0 22 * * *'`).
+7. The v3 workflow already runs up to 3 isolated jobs (`max-parallel: 3`, `fail-fast: false`), each from a fresh `origin/master`. Prove one real PR + independent review + Jira transition before leaving a schedule unattended. The daily schedule is already `cron: '0 23 * * *'` (00:00 Europe/Madrid en invierno, CET; en verano, CEST, sería `'0 22 * * *'`). Do not add a second one.
 
 ## Limitation / security
 - The sample workflow is disabled by default and is NOT deployment-ready until Go and Jira auth are verified. Its generic env injection is intentionally a placeholder requiring adaptation; the GitHub action may need additional provider configuration.
@@ -28,7 +28,7 @@ OpenCode Go is a model SUBSCRIPTION/PROVIDER, NOT a hosted job scheduler. Use of
 
 ## Factoría v3 (17/10/2026) — supersedes the pilot above
 
-- New bounded single-issue engine: see `V3-README.md`, `MIGRACION.md` and `PRUEBAS-Y-ARRANQUE-LIMPIO.md`. Models: orchestrator **Kimi K3.1 Pro** (`opencode-go/kimi-k3.1-pro`), builder **DeepSeek V4.1 Flash** (`opencode-go/deepseek-v4.1-flash`), reviewer **Kimi K3.1 Pro**. Daily run: `cron: '0 23 * * *'` (00:00 Europe/Madrid en invierno, CET; en verano, CEST, sería `'0 22 * * *'`). The previous Kimi K3 had a lower Go quota than Kimi K2.7 Code (about $15 vs $60 of monthly Go usage); that figure is not a quota for Kimi K3.1 Pro.
+- Engine for up to 3 issues per run: see `V3-README.md`, `MIGRACION.md` and `PRUEBAS-Y-ARRANQUE-LIMPIO.md`. Job `select` (no LLM) preflights models and picks up to 3 Listo + `engine-opencode` stories by Rank, blockers in Finalizada, no existing branch/PR. Job `factory` is a matrix (`max-parallel: 3`, `fail-fast: false`) with the same per-story caps and a branch from a fresh `origin/master`. `issue_key` forces that one story; no eligible story is `NO_WORK` and a green run. Models: orchestrator **Kimi K3.1 Pro** (`opencode-go/kimi-k3.1-pro`), builder **DeepSeek V4.1 Flash** (`opencode-go/deepseek-v4.1-flash`), reviewer **Kimi K3.1 Pro**. CLI pin: `OPENCODE_VERSION: 1.19.4` (not `@latest`) in the factory, pilot and connectivity workflows. `check_config.py` retries `opencode models opencode-go` up to 3 times, 60 s apart, and names every missing model without substituting. Daily run: `cron: '0 23 * * *'` (00:00 Europe/Madrid en invierno, CET; en verano, CEST, sería `'0 22 * * *'`). The previous Kimi K3 had a lower Go quota than Kimi K2.7 Code (about $15 vs $60 of monthly Go usage); that figure is not a quota for Kimi K3.1 Pro.
 - `.github/workflows/opencode-factory.yml` (v3, `mode=inspect|build`, optional `issue_key` with deterministic no-LLM selection, no new GitHub Variables required) **supersedes `opencode-factory-PILOT.yml`**. The old file is kept only because nothing is deleted without Álvaro's explicit order; he may delete it. Never install both in a product repo.
 - Board equivalences kept: Ready = Listo, Done = Finalizada (`jira_gate.py` accepts both). Feature branches come from a fresh fetch of `origin/master`.
 - The model IDs above replace the older `glm-5.3` suggestion in "Auth blocker" step 1.

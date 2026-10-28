@@ -46,7 +46,7 @@ Funciona igual que el piloto anterior (Licitaciones PR #16 / contracts PR #5): l
 - **Repositorio:** si la story no declara repositorio, se usa el repo donde corre el workflow (`GITHUB_REPOSITORY`). Se aceptan `Repository: owner/repo`, `Repositorio: owner/repo` y `Repositorio destino: owner/repo` (con negrita/código Markdown o URL de GitHub). Si la story nombra **otro** repo, el gate falla. `JIRA_REPOSITORY_FIELD_ID` es opcional, solo si algún día usas un campo propio.
 - Dependencias: enlaces estructurados de Jira y referencias textuales explícitas (incluida la línea `Dependencias (is blocked by): KAN-8, …` de las stories KAN). `JIRA_DEPENDENCIES_FIELD_ID` es opcional. **La lectura de dependencias ambigua todavía bloquea según el contrato del orquestador**.
 - **Equivalencia de estados (misma regla que Claude y Cursor, copiada de `multiprovider/claude/01-jira-three-parallel-STRICT-ROUTING.md`):** `Ready` = `Listo` y `Done` = `Finalizada` en todas las comprobaciones (selección, gate de dependencias y re-checks). Cualquier otro nombre no es Ready/Done; solo se normalizan mayúsculas y espacios. Por eso `JIRA_READY_STATUS`/`JIRA_DONE_STATUS` ya no se usan: no hay nada que configurar y los tres providers se comportan igual.
-- **Sin `issue_key`:** el runner elige sin LLM (REST/JQL `project = KAN AND labels = agent-ready AND labels = engine-opencode … ORDER BY Rank ASC`) la **primera** story elegible: `Ready`/`Listo`, solo `engine-opencode`, repo correcto, todos los blockers en `Done`/`Finalizada` y sin rama `agent/<clave>` ni PR abierta. Una sola issue por run. Si no hay ninguna, `NO_WORK` y el run acaba en verde sin llamar al modelo.
+- **Sin `issue_key`:** el job `select` elige sin LLM (REST/JQL `project = KAN AND labels = agent-ready AND labels = engine-opencode … ORDER BY Rank ASC`) hasta `max_issues` stories (1–3, por defecto 3): `Ready`/`Listo`, solo `engine-opencode`, repo correcto, todos los blockers en `Done`/`Finalizada` y sin rama `agent/<clave>` ni PR abierta. El job `factory` las ejecuta en paralelo (`max-parallel: 3`, `fail-fast: false`), cada una desde un fetch fresco de `origin/master` y con los mismos topes. Con `issue_key` solo esa story. Si no hay ninguna, `NO_WORK` y el run acaba en verde sin llamar al modelo.
 - Las ramas de feature se crean desde un fetch fresco de `origin/master` (el workflow hace `git fetch origin master` justo antes de crear `agent/<clave>`).
 - Si no hay transición disponible a In Progress, AI Review o Human Review, el piloto debe parar sin simularla.
 
@@ -74,11 +74,13 @@ Variables (ya existentes o con valor por defecto; ninguna nueva es obligatoria):
 
 No escribas secrets en `opencode.json` ni en commits. **Use balance OFF** en OpenCode Go Console.
 
+El CLI no se instala con `@latest`. Los workflows de OpenCode fijan `OPENCODE_VERSION: 1.19.4` (`opencode-ai@1.19.4`; el piloto superado usa `anomalyco/opencode/github@v1.19.4`).
+
 ## 6. Ensayo
 
-Como antes: Actions → workflow → Run workflow, y ya. `issue_key` vacío = selección automática de la primera story elegible; `mode` por defecto `build` (una ejecución vigilada).
+Como antes: Actions → workflow → Run workflow, y ya. `issue_key` vacío = selección automática de hasta `max_issues` stories (1–3, por defecto 3); `mode` por defecto `build` (una ejecución vigilada por story).
 
-Recomendado la primera vez: `mode=inspect` (con o sin `issue_key`) para ver qué story elegiría, sin gastar tokens de OpenCode Go (solo llamadas normales a Jira/GitHub). Ante `GATE_BLOCKED`, corrige solo el problema indicado; no repitas a ciegas. Después `mode=build`: **una sola issue** por run. Observa los logs; no añadas un segundo Schedule ni tres builders. El workflow ya incluye el cron diario `0 23 * * *` (00:00 Europe/Madrid en invierno, CET; en verano, CEST, sería `0 22 * * *`).
+Recomendado la primera vez: `mode=inspect` (con o sin `issue_key`) para ver qué stories elegiría, sin gastar tokens de OpenCode Go (solo llamadas normales a Jira/GitHub y el preflight de modelos). Ante `GATE_BLOCKED`, corrige solo el problema indicado; no repitas a ciegas. Después `mode=build`: **hasta 3 stories** por run, en jobs separados. Observa los logs; no añadas un segundo Schedule. El workflow ya incluye el cron diario `0 23 * * *` (00:00 Europe/Madrid en invierno, CET; en verano, CEST, sería `0 22 * * *`).
 
 ## 7. Sobre el watchdog
 

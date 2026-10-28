@@ -31,7 +31,7 @@ The human owns product architecture, issue approval, conflict resolution, and me
 - No agent merges, rebases across feature branches, resolves conflicts between unrelated PRs, deploys, changes permissions/secrets or bypasses policy. User handles final PR approval/merge and Jira Done until sync is implemented.
 
 ## Batch safety
-- At most 3 issues per batch. Parallel builders only in isolated workspaces the runner can verify: a provider-native isolated worktree/VM (Claude `isolation: worktree`) or, for Cursor, one git worktree per issue created and verified by the orchestrator before dispatch (that verification is the isolation proof). Never more than one writer in the same directory. A runner without such isolation (e.g. the OpenCode pilot) processes ONE issue per run.
+- At most 3 issues per batch. Parallel builders only in isolated workspaces the runner can verify: a provider-native isolated worktree/VM (Claude `isolation: worktree`), for Cursor one git worktree per issue created and verified by the orchestrator before dispatch (that verification is the isolation proof), or for OpenCode one GitHub-hosted job per story (`max-parallel: 3`, `fail-fast: false`), each branched from a fresh `origin/master`. Never more than one writer in the same directory. A runner without such isolation processes ONE issue per run.
 - Never refill a batch after one feature completes.
 - Do not use a passing implementation of an issue in the same batch to bypass the Jira Done dependency requirement.
 

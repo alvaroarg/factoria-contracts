@@ -18,14 +18,15 @@
 |---|---|---|
 | Agente `factory-orchestrator` ausente | `inspect` | CONFIG_BLOCKED **sin llamar a Kimi K3.1 Pro** |
 | Builder todavía GLM | `inspect` | CONFIG_BLOCKED por modelo incompatible |
-| DeepSeek V4.1 Flash ausente en catálogo Go | `inspect` | CONFIG_BLOCKED sin sustituto automático |
+| DeepSeek V4.1 Flash ausente en catálogo Go | `inspect` | CONFIG_BLOCKED sin sustituto automático; el error nombra todos los modelos que faltan, tras hasta 3 listados separados 60 s |
 | Sin `OPENCODE_GO_API_KEY` | `inspect` | CONFIG_BLOCKED |
 | Jira sin `engine-opencode` exclusivo | `inspect` | GATE_BLOCKED |
 | Jira en `En curso` / In Progress | `inspect` | GATE_BLOCKED; nunca reabrir automáticamente |
 | Jira en `Listo` (= Ready) y blockers en `Finalizada` (= Done) | `inspect` | Elegible (misma regla de estados que Claude/Cursor) |
 | Estado con otro nombre (p. ej. `Selected for Development`) aunque haya variable | `inspect` | GATE_BLOCKED: "Any other name is not Ready/Done" |
 | Sin ninguna variable de GitHub (salvo secrets y `JIRA_URL` ya existentes) | `inspect`/`build` | Funciona con los valores por defecto |
-| `issue_key` vacío | `inspect`/`build` | Elige sin LLM la primera story elegible por Rank ASC; una sola |
+| `issue_key` vacío | `inspect`/`build` | Elige sin LLM hasta `max_issues` stories elegibles por Rank ASC (1–3, por defecto 3) y, en `build`, un job por story |
+| `issue_key` con una clave | `inspect`/`build` | Solo esa story, aunque `max_issues` sea 3 |
 | `issue_key` vacío y ninguna elegible | `inspect`/`build` | `NO_WORK`, run en verde, sin llamar al modelo |
 | Story sin `Repository:` | `inspect` | Usa el repo del workflow |
 | Story con `Repositorio destino:` de otro repo | `inspect` | GATE_BLOCKED |
@@ -51,4 +52,4 @@ El watchdog guarda JSON bruto (potencialmente sensible) sólo en `$RUNNER_TEMP` 
 - Consumo controlado: compara cuota antes/después en Console; no fiarse de estimaciones sólo por logs.
 - Hard stop temporal/no-progreso y `steps` para todos, pero ningún límite duro de tokens garantizado.
 - Revisar seguridad de GitHub Token, Jira API Token y CI que no se dispara tras PRs creadas por `GITHUB_TOKEN`.
-- El `schedule` ya está definido: cron `0 23 * * *` (00:00 Europe/Madrid en invierno, CET; en verano, CEST, sería `0 22 * * *`). El paralelismo sigue fuera; la próxima fase necesita reparto/aislamiento de ramas y runners, no basta con subir `BATCH_LIMIT`.
+- El `schedule` ya está definido: cron `0 23 * * *` (00:00 Europe/Madrid en invierno, CET; en verano, CEST, sería `0 22 * * *`). Cada run puede tomar hasta 3 stories en jobs distintos (`max-parallel: 3`, `fail-fast: false`). Cada rama sale de un fetch fresco de `origin/master` y conserva los mismos topes (355 min, 20400 s, 900 s sin editar, 5.000.000 de tokens).

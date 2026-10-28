@@ -45,4 +45,64 @@ class CheckConfigTests(unittest.TestCase):
         self.assertEqual(cfg['model'], 'opencode-go/kimi-k3.1-pro')
         self.assertIn('jira', cfg['mcp'])
 
+
+class ModelListRetryTests(unittest.TestCase):
+    required = ('opencode-go/deepseek-v4.1-flash', 'opencode-go/kimi-k3.1-pro')
+
+    def test_retries_three_times_with_60s_and_names_every_missing_model(self):
+        calls = []
+        sleeps = []
+
+        class Result:
+            returncode = 0
+            stdout = 'opencode-go/some-other-model\n'
+
+        def fake_run(args, timeout=40):
+            calls.append((args, timeout))
+            return Result()
+
+        with self.assertRaises(ValueError) as caught:
+            mod.require_opencode_go_models(run_cmd=fake_run, sleep=lambda s: sleeps.append(s))
+        message = str(caught.exception)
+        for model in self.required:
+            self.assertIn(model, message)
+        self.assertIn('do not auto substitute', message)
+        self.assertNotIn('substitute with', message.lower())
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(calls[0][0], ['opencode', 'models', 'opencode-go'])
+        self.assertEqual(sleeps, [60, 60])
+        self.assertEqual(mod.MODEL_LIST_ATTEMPTS, 3)
+        self.assertEqual(mod.MODEL_LIST_DELAY_SECONDS, 60)
+
+    def test_success_on_second_attempt_does_not_sleep_again(self):
+        sleeps = []
+        state = {'n': 0}
+
+        class Result:
+            def __init__(self, code, out):
+                self.returncode = code
+                self.stdout = out
+
+        def fake_run(args, timeout=40):
+            state['n'] += 1
+            if state['n'] == 1:
+                return Result(1, '')
+            return Result(0, 'opencode-go/kimi-k3.1-pro\nopencode-go/deepseek-v4.1-flash\n')
+
+        mod.require_opencode_go_models(run_cmd=fake_run, sleep=lambda s: sleeps.append(s))
+        self.assertEqual(sleeps, [60])
+        self.assertEqual(state['n'], 2)
+
+    def test_command_failure_names_every_required_model(self):
+        class Result:
+            returncode = 1
+            stdout = ''
+
+        with self.assertRaises(ValueError) as caught:
+            mod.require_opencode_go_models(run_cmd=lambda *a, **k: Result(), sleep=lambda s: None, attempts=1, delay=60)
+        message = str(caught.exception)
+        for model in self.required:
+            self.assertIn(model, message)
+        self.assertIn('do not auto substitute', message)
+
 if __name__ == '__main__': unittest.main()

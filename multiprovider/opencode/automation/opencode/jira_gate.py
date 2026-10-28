@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Deterministic, read-only, fail-closed eligibility check for ONE Jira issue.
+"""Deterministic, read-only, fail-closed eligibility check.
 
 NO LLM calls, NO Jira state writes. This supplements (does not replace) the
 orchestrator's own re-check just before In Progress.
 
 Zero configuration, like the previous pilot (Licitaciones PR #16 / contracts
-PR #5): with ``--issue`` it checks exactly that key; with an empty ``--issue``
-it selects deterministically (REST/JQL, no LLM) the FIRST eligible issue by
-Jira ``Rank ASC`` (Ready/Listo + agent-ready + ONLY engine-opencode, every
-blocker Done/Finalizada, no existing ``agent/<key>`` branch/PR). One issue per
-run; no eligible issue => ``NO_WORK`` and exit 0 without any LLM call.
+PR #5): with ``--issue`` it checks exactly that key and no other. With an
+empty ``--issue`` it selects deterministically (REST/JQL, no LLM) up to
+``--max-issues`` eligible issues (1–3, default 3) by Jira ``Rank ASC``
+(Ready/Listo + agent-ready + ONLY engine-opencode, every blocker
+Done/Finalizada, no existing ``agent/<key>`` branch/PR). No eligible issue
+=> ``NO_WORK`` and exit 0 without any LLM call.
 """
 import argparse
 import base64
@@ -328,11 +329,30 @@ def candidate_jql(project):
             'AND statusCategory != Done ORDER BY Rank ASC')
 
 
-def select(mode, get_issue, search, check_github=True, limit=50):
-    """First eligible issue by Rank ASC, or None. Infra errors abort (fail closed)."""
+def parse_max_issues(raw):
+    """Accept only 1, 2 or 3. Anything else is a hard gate failure."""
+    try:
+        n = int(str(raw).strip())
+    except (TypeError, ValueError):
+        raise GateError("max_issues must be an integer from 1 to 3") from None
+    if n < 1 or n > 3:
+        raise GateError("max_issues must be an integer from 1 to 3")
+    return n
+
+
+def select(mode, get_issue, search, check_github=True, limit=50, max_issues=3):
+    """Up to ``max_issues`` eligible issues in Rank ASC order.
+
+    Returns ``(chosen, skipped)``. ``chosen`` is empty when nothing qualifies.
+    Infra errors abort (fail closed) and are not turned into skips.
+    """
+    max_issues = parse_max_issues(max_issues)
     project = project_key()
     skipped = []
+    chosen = []
     for key in search(candidate_jql(project), limit):
+        if len(chosen) >= max_issues:
+            break
         if not isinstance(key, str) or not KEY.fullmatch(key):
             continue
         try:
@@ -343,9 +363,8 @@ def select(mode, get_issue, search, check_github=True, limit=50):
             skipped.append({"issue": key, "reason": str(exc)})
             continue
         result["selected"] = "auto"
-        result["skipped"] = skipped
-        return result, skipped
-    return None, skipped
+        chosen.append(result)
+    return chosen, skipped
 
 
 def write_outputs(values):
@@ -360,20 +379,32 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--issue", default="", help="Exact key; empty = deterministic auto-selection")
     parser.add_argument("--mode", choices=["inspect", "build"], default="inspect")
+    parser.add_argument("--max-issues", default="3", help="Auto-select cap, integer 1-3 (ignored when --issue is set)")
     args = parser.parse_args(argv)
     requested = (args.issue or "").strip().upper()
     try:
         if requested:
+            # An explicit key is the whole batch, whatever --max-issues says.
             result = validate(requested, args.mode, jira_client())
             result["selected"] = "requested"
+            results, skipped = [result], []
         else:
-            result, skipped = select(args.mode, jira_client(), jira_search_client())
-            if result is None:
+            max_issues = parse_max_issues(args.max_issues)
+            results, skipped = select(
+                args.mode, jira_client(), jira_search_client(), max_issues=max_issues
+            )
+            if not results:
                 print("NO_WORK " + json.dumps({"skipped": skipped}, ensure_ascii=False))
-                write_outputs({"issue": "", "branch": "", "has_work": "false"})
+                write_outputs({"issue": "", "branch": "", "issues": "[]", "has_work": "false"})
                 return 0
-        print("ELIGIBLE " + json.dumps(result, ensure_ascii=False))
-        write_outputs({"branch": result["branch"], "issue": result["issue"], "has_work": "true"})
+        keys = [item["issue"] for item in results]
+        print("ELIGIBLE " + json.dumps({"issues": results, "skipped": skipped}, ensure_ascii=False))
+        write_outputs({
+            "issues": json.dumps(keys),
+            "issue": results[0]["issue"],
+            "branch": results[0]["branch"],
+            "has_work": "true",
+        })
     except (GateError, KeyError) as exc:
         print(f"GATE_BLOCKED: {exc}", file=sys.stderr)
         return 2
