@@ -2,7 +2,7 @@
 
 Este repo guarda los **contratos, agentes y workflows** de la factoría. Lo que hay aquí se copia a cada repo de producto. Aquí no hay código de producto: un humano diseña y aprueba las stories en Jira, y los agentes las implementan, se revisan y dejan un **Draft PR** para revisión humana.
 
-> Estado: Claude v6.1 con routing estricto, Cursor v3 (builders en paralelo en worktrees) y OpenCode v3 (una issue por run, Kimi K3.1 Pro + DeepSeek V4.1 Flash). Los detalles de cada provider están en [`multiprovider/README.md`](multiprovider/README.md).
+> Estado: Claude v6.1 con routing estricto, Cursor v3 (builders en paralelo en worktrees) y OpenCode v3 (hasta 3 issues por run, en paralelo, Kimi K3.1 Pro + DeepSeek V4.1 Flash). Los detalles de cada provider están en [`multiprovider/README.md`](multiprovider/README.md).
 
 ## Índice
 
@@ -47,7 +47,7 @@ Cada story se asigna a **un solo** provider con una etiqueta de Jira: `engine-cl
 | Orquestador | Opus (contrato en la Routine) | Modelo elegido en la Automation (contrato pegado en su prompt) | **Kimi K3.1 Pro**: `opencode-go/kimi-k3.1-pro`, `steps: 40` |
 | Builder | Sonnet (`.claude/agents/feature-builder.md`) | `.cursor/agents/feature-builder.md` (`model: inherit`) | **DeepSeek V4.1 Flash**: `opencode-go/deepseek-v4.1-flash`, **sin límite de pasos** (no tiene clave `steps`) |
 | Reviewer | Opus, solo lectura (`.claude/agents/pr-reviewer.md`) | `.cursor/agents/pr-reviewer.md` (`model: inherit`, `readonly: true`) | **Kimi K3.1 Pro**, `steps: 15`, comandos de solo lectura |
-| Stories por run | Hasta 3 por Rank, en paralelo (worktrees) | Hasta 3 por Rank (`BATCH_LIMIT=3`), builders en paralelo en worktrees `/tmp/<KEY>-wt` que crea el orquestador | **1** por run, elegida por Rank sin LLM |
+| Stories por run | Hasta 3 por Rank, en paralelo (worktrees) | Hasta 3 por Rank (`BATCH_LIMIT=3`), builders en paralelo en worktrees `/tmp/<KEY>-wt` que crea el orquestador | **Hasta 3** por Rank, en paralelo (matriz de jobs, `max-parallel: 3`, `fail-fast: false`); la selección es sin LLM |
 | Disparo | Un único trigger *Schedule → Daily* en la UI de Claude Routines | Un único trigger *Schedule* diario en la Automation, escalonado respecto a Claude | `cron: '0 23 * * *'` (UTC), que son las 00:00 Europe/Madrid en invierno (CET), más `workflow_dispatch` manual |
 | Rondas de corrección | Máximo 3 | Máximo 3, cada una con un reviewer nuevo | Máximo 1, y solo si se puede retomar el mismo builder y la misma rama |
 | Rama | Worktree del builder | `cursor/<KEY>-<slug>` | `agent/<key-en-minúsculas>` |
@@ -55,7 +55,7 @@ Cada story se asigna a **un solo** provider con una etiqueta de Jira: `engine-cl
 
 Notas:
 - **Cursor v3 (opción B, en paralelo).** El orquestador hace `git fetch origin` y congela `BASE_COMMIT = origin/master`. Para cada story crea `git worktree add /tmp/<KEY>-wt -b cursor/<KEY>-<slug> <BASE_COMMIT>` y la verifica con `worktree list`, `show-toplevel`, la rama y `HEAD == BASE_COMMIT`. **Esa verificación es la prueba de aislamiento.** Lanza los builders a la vez y comprueba que el checkout padre sigue limpio (`git status --porcelain`). Para el reviewer, obtiene el diff con git autenticado (`git fetch origin pull/<N>/head`) y se lo pasa en un fichero `.review/pr-<N>-<HEAD>.diff`.
-- **OpenCode v3.** `check_config.py` y `jira_gate.py` validan agentes, modelos y elegibilidad **sin gastar tokens**. `guarded_run.py` lanza un único `opencode run` vigilado por el watchdog. `postflight.py` comprueba que existen el Draft PR, el marcador de review en el HEAD y Jira en Human Review. Si un run falla, el diff del builder se guarda como artefacto `opencode-factory-diff` (`.patch`, 7 días) sin hacer push.
+- **OpenCode v3.** El job `select` (sin LLM) hace el preflight de modelos y elige hasta 3 stories. `check_config.py` reintenta `opencode models opencode-go` hasta 3 veces, con 60 s entre intentos, y si bloquea nombra todos los modelos que faltan, sin sustituirlos. `jira_gate.py` valida la elegibilidad **sin gastar tokens**. El job `factory` es una matriz (`max-parallel: 3`, `fail-fast: false`): cada story tiene su runner, los mismos topes y un `opencode run` vigilado por `guarded_run.py`. `postflight.py` comprueba que existen el Draft PR, el marcador de review en el HEAD y Jira en Human Review. Si un job falla, el diff del builder se guarda como artefacto `opencode-factory-diff-<KEY>` (`.patch`, 7 días) sin hacer push; las otras stories siguen.
 - **Cron de OpenCode y horario de verano.** GitHub Actions interpreta el cron en UTC. En verano (CEST), las 00:00 de Madrid serían `'0 22 * * *'`. No añadas un segundo schedule que se solape con las ventanas de Claude o Cursor.
 
 ## Reglas comunes (todos los providers)
@@ -113,7 +113,7 @@ flowchart LR
 ### Selección
 
 - **Claude y Cursor:** el orquestador busca por MCP las stories en Listo + `agent-ready` ordenadas por `Rank ASC`. Lee el **detalle completo** de cada una (la JQL solo sirve como primer filtro) y toma las **3 primeras elegibles** (`BATCH_LIMIT=3`), siguiendo hacia abajo si se salta alguna. Comprueba los blockers dos veces: al elegir y justo antes de pasar a In Progress.
-- **OpenCode:** si `issue_key` está vacío, el **runner sin LLM** elige **una** story. Lanza por REST la JQL `project = "KAN" AND labels = "agent-ready" AND labels = "engine-opencode" AND statusCategory != Done ORDER BY Rank ASC`, sin filtrar el estado en la JQL, y valida candidata a candidata leyendo `summary`, `status`, `labels`, `description` e `issuelinks` (más los campos propios, si los hay). Se queda con la primera que pasa, siempre que no exista ya la rama `agent/<key>` ni un PR abierto. Si ninguna pasa, el resultado es `NO_WORK`. Después el orquestador vuelve a comprobarlo todo por MCP.
+- **OpenCode:** si `issue_key` está vacío, el **job `select` sin LLM** elige **hasta 3** stories (`max_issues` 1–3, por defecto 3). Lanza por REST la JQL `project = "KAN" AND labels = "agent-ready" AND labels = "engine-opencode" AND statusCategory != Done ORDER BY Rank ASC`, sin filtrar el estado en la JQL, y valida candidata a candidata leyendo `summary`, `status`, `labels`, `description` e `issuelinks` (más los campos propios, si los hay). Se queda con las que pasan, por Rank, siempre que estén en Listo/Ready, lleven solo `engine-opencode`, tengan los blockers en Finalizada/Done y no exista ya la rama `agent/<key>` ni un PR abierto. Con `issue_key` solo entra esa story. Si ninguna pasa, el resultado es `NO_WORK` y el run acaba en verde. El job `factory` recomprueba esa story y el orquestador vuelve a comprobarlo todo por MCP.
 
 ### Inyección: qué recibe cada agente
 
@@ -122,7 +122,7 @@ flowchart LR
 | Cómo lee Jira el orquestador | Jira/Atlassian MCP de la Routine | Jira MCP del entorno del Cloud Agent | El runner, por REST (`jira_gate.py`). El orquestador Kimi, por MCP `mcp-atlassian` |
 | Prompt del orquestador | El contrato pegado en la Routine | El contrato pegado en la Automation | `pilot-prompt.md`, donde `guarded_run.py` sustituye `__ISSUE_KEY__` y `__GITHUB_REPOSITORY__`, más el contrato `factory-orchestrator.md` |
 | **Brief al builder** | Key + URL de Jira, spec aprobada **congelada** y completa, criterios de aceptación, `owner/repo`, rama base, commit base y registro `DEPENDENCY_GATE` (`VERIFIED_ALL_DONE` / `VERIFIED_NO_BLOCKERS`). Sin ese registro, el builder devuelve BLOCKED | Spec completa + URL, criterios, repo, `BASE_COMMIT`, rama `cursor/<KEY>-<slug>`, **ruta absoluta del worktree** `/tmp/<KEY>-wt` y las instrucciones aplicables (AGENTS.md) | Key, spec aprobada relevante, criterios, rama `agent/<key>` (creada por el runner desde `origin/master`) y ubicación de los AGENTS.md. La orden es buscar acotado y editar en 10 pasos o menos |
-| Aislamiento del builder | Worktree propio (`isolation: worktree`) | Worktree creado y verificado por el orquestador | Checkout del runner en la rama de la story (una story por run) |
+| Aislamiento del builder | Worktree propio (`isolation: worktree`) | Worktree creado y verificado por el orquestador | Checkout del runner en la rama de la story (hasta 3 jobs en paralelo, uno por story) |
 | **Lo que recibe el reviewer** | El diff real del PR publicado, la spec de Jira y las convenciones del repo, incluidos los cambios en AGENTS.md | URL y número del PR, `BASE_COMMIT`, `HEAD_COMMIT`, **fichero `.review/pr-<N>-<HEAD>.diff`** obtenido con git autenticado, la ruta del worktree, el diseño original, la evidencia de tests y CI, y los cambios en AGENTS.md | Spec + URL de la issue y URL y HEAD del PR publicado. Lee el diff con `gh pr diff` / `gh pr view` y Jira con `jira_get_issue` / `jira_search`, todo en solo lectura |
 | **Lo que vuelve a GitHub y a Jira** | Draft PR con la URL de Jira, el mapeo de criterios, los tests, AGENTS.md y los riesgos. Informe factual en Jira y transición a Human Review | Draft PR con `Factory Engine: cursor` y `Factory Jira: <KEY>`, la URL de Jira, el mapeo de criterios y los tests. Informe en Jira (key, repo, rama, PR, tests, veredicto y HEAD, AGENTS.md, rondas) y transición | Draft PR con `Factory Engine: opencode` y `Factory Jira: <KEY>`. Al pasar a AI Review se apuntan el enlace y el HEAD. Comentario en el PR con `Factory Review: PASS` / `Factory Review Head: <sha>` / `Factory Reviewer: pr-reviewer` y paso a Human Review. `postflight.py` comprueba el PR, el marcador y el estado |
 
@@ -231,6 +231,7 @@ Al repo de producto se copian los archivos del provider **con sus mismas rutas**
    automation/opencode/pilot-prompt.md
    ```
    Opcional: `tests/` y `.github/workflows/opencode-connectivity.yml` (diagnóstico). **No** copies `opencode-factory-PILOT.yml` junto al v3, porque tendrías dos workflows de implementación. Comprueba el JSON con `python -m json.tool opencode.json >/dev/null`.
+   El CLI queda fijado en el workflow con `OPENCODE_VERSION: 1.19.4` (`npm install --global opencode-ai@1.19.4`). No vuelvas a `@latest`. El piloto usa la Action `anomalyco/opencode/github@v1.19.4` y el workflow de conectividad instala el mismo `OPENCODE_VERSION`.
 2. Configura en **GitHub → Settings → Secrets and variables → Actions**:
 
    | Tipo | Nombre | Obligatorio | Uso |
@@ -253,9 +254,9 @@ Al repo de producto se copian los archivos del provider **con sus mismas rutas**
      - **(b) GitHub App propia** con [`actions/create-github-app-token`](https://github.com/actions/create-github-app-token). Los PRs los firma el bot, **sí** disparan el CI y no hay token que caduque. Necesita más preparación: crear e instalar la App y guardar dos secrets.
    - **Recomendación:** empieza con el permiso de arriba. Pasa a la GitHub App (b) cuando quieras que el CI se ejecute en los PRs de la factoría.
 4. En la consola de OpenCode Go, deja **Use balance desactivado**, para que un 429 por cuota no gaste crédito Zen.
-5. Haz commit y push. El workflow aparece como **Actions → «OpenCode Factory - bounded single issue»**.
-6. **Prueba sin gastar cuota:** *Run workflow* con `mode=inspect` y `issue_key` vacío, o con una key concreta. Esto valida la API key, que los modelos existen en `opencode models opencode-go`, los agentes y la elegibilidad en Jira **sin llamar al LLM ni tocar Jira**. Si no hay ninguna story elegible, termina en verde con `NO_WORK`.
-7. Después puedes lanzar `mode=build` a mano (es el modo por defecto) o esperar al cron diario de las 00:00 (Madrid, en invierno). Cada run procesa **una** story `engine-opencode`.
+5. Haz commit y push. El workflow aparece como **Actions → «OpenCode Factory - up to 3 issues»**.
+6. **Prueba sin gastar cuota:** *Run workflow* con `mode=inspect` y `issue_key` vacío, o con una key concreta. El job `select` valida la API key, que los modelos existen en `opencode models opencode-go` (hasta 3 intentos, 60 s entre ellos), los agentes y la elegibilidad en Jira **sin llamar al LLM ni tocar Jira**. Si no hay ninguna story elegible, termina en verde con `NO_WORK` y no arranca `factory`.
+7. Después puedes lanzar `mode=build` a mano (es el modo por defecto) o esperar al cron diario de las 00:00 (Madrid, en invierno). Cada run procesa **hasta 3** stories `engine-opencode` en paralelo (`max_issues` 1–3, por defecto 3). Con `issue_key` solo esa. El schedule no cambia: `cron: '0 23 * * *'`.
 
 Para migrar desde paquetes anteriores, mira [`MIGRACION.md`](multiprovider/opencode/MIGRACION.md). La matriz de pruebas está en [`PRUEBAS-Y-ARRANQUE-LIMPIO.md`](multiprovider/opencode/PRUEBAS-Y-ARRANQUE-LIMPIO.md) y el detalle en [`V3-README.md`](multiprovider/opencode/V3-README.md).
 
@@ -271,8 +272,8 @@ Para migrar desde paquetes anteriores, mira [`MIGRACION.md`](multiprovider/openc
 |---|---|
 | El run termina en verde sin hacer nada (`NO_WORK`) | No hay ninguna story en Listo + `agent-ready` con la etiqueta `engine-*` de ese provider, o todas tienen blockers que no están en Finalizada. |
 | `GATE_BLOCKED` (OpenCode) | La story no está exactamente en Listo/Ready, tiene una etiqueta engine que no toca o más de una, apunta a otro repo, un blocker no está en Finalizada, o ya existe rama o PR. Corrige solo lo que diga el error. |
-| `CONFIG_BLOCKED` (OpenCode) | Falta un agente o su modelo no coincide, los IDs no aparecen en `opencode models opencode-go`, falta `OPENCODE_GO_API_KEY`, `ENABLE_OPENCODE_FACTORY_PILOT=false`, o no existe `origin/master`. |
-| `BLOCKED_NO_PROGRESS_TIMEBOUND` / `BLOCKED_QUOTA_429` | 900 s sin editar o cuota agotada. No hay reintento. Revisa la cuota en la consola Go. El diff parcial está en el artefacto `opencode-factory-diff`. |
+| `CONFIG_BLOCKED` (OpenCode) | Falta un agente o su modelo no coincide, tras 3 intentos (60 s) los IDs siguen sin aparecer en `opencode models opencode-go` (el error nombra todos los que faltan y no sustituye ninguno), falta `OPENCODE_GO_API_KEY`, `ENABLE_OPENCODE_FACTORY_PILOT=false`, o no existe `origin/master`. |
+| `BLOCKED_NO_PROGRESS_TIMEBOUND` / `BLOCKED_QUOTA_429` | 900 s sin editar o cuota agotada. No hay reintento de esa story. Revisa la cuota en la consola Go. El diff parcial está en el artefacto `opencode-factory-diff-<KEY>`. Las otras stories de la matriz siguen. |
 | `POSTFLIGHT_BLOCKED` | No se creó el Draft PR, o el PASS no corresponde al HEAD actual. Jira no pasa a Human Review. |
 | El reviewer de Cursor devuelve 404 o no ve el diff | En repos privados, el orquestador tiene que pasarle el diff autenticado (`git fetch origin pull/<N>/head`) en `.review/`. Vuelve a pegar el contrato v3 en la Automation. |
 | Cursor marca una story `CONFIG_BLOCKED` o `BLOCKED` por worktree | Falló `git worktree add` o su verificación, o un builder escribió en el checkout padre. Las demás stories siguen. |

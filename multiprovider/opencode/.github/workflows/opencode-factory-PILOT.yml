@@ -9,6 +9,11 @@ on:
         default: ""
         type: string
 
+# Same CLI/action pin as opencode-factory.yml. The action tag is v<OPENCODE_VERSION>
+# (`uses:` cannot read env). This pilot stays one issue; the v3 workflow runs up to 3.
+env:
+  OPENCODE_VERSION: 1.19.4
+
 concurrency:
   group: opencode-factory-${{ github.repository }}
   cancel-in-progress: false
@@ -57,7 +62,7 @@ jobs:
           uvx mcp-atlassian --help > /dev/null
 
       - name: Execute exactly one Jira feature
-        uses: anomalyco/opencode/github@latest
+        uses: anomalyco/opencode/github@v1.19.4
         with:
           use_github_token: true
           model: opencode-go/kimi-k3.1-pro

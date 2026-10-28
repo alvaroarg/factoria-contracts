@@ -213,20 +213,38 @@ class ZeroConfigTests(unittest.TestCase):
         def search(jql, limit=50):
             seen.append(jql); return ['KAN-1','KAN-2','KAN-3','KAN-4','KAN-5']
         with no_vars_env():
-            result, skipped = mod.select('inspect', data.__getitem__, search, check_github=False)
-        self.assertEqual(result['issue'], 'KAN-4')
-        self.assertEqual(result['branch'], 'agent/kan-4')
+            chosen, skipped = mod.select('inspect', data.__getitem__, search, check_github=False)
+        self.assertEqual([c['issue'] for c in chosen], ['KAN-4', 'KAN-5'])
+        self.assertEqual(chosen[0]['branch'], 'agent/kan-4')
         self.assertEqual([s['issue'] for s in skipped], ['KAN-1','KAN-2','KAN-3'])
         self.assertIn('project = "KAN"', seen[0]); self.assertIn('engine-opencode', seen[0])
         self.assertIn('agent-ready', seen[0]); self.assertTrue(seen[0].endswith('ORDER BY Rank ASC'))
+
+    def test_max_issues_one_stops_at_first_eligible(self):
+        data=self._backlog()
+        with no_vars_env():
+            chosen, skipped = mod.select('inspect', data.__getitem__, lambda j,l=50: ['KAN-1','KAN-2','KAN-3','KAN-4','KAN-5'], check_github=False, max_issues=1)
+        self.assertEqual([c['issue'] for c in chosen], ['KAN-4'])
+        self.assertEqual([s['issue'] for s in skipped], ['KAN-1','KAN-2','KAN-3'])
+
+    def test_max_issues_three_keeps_rank_order(self):
+        keys=['KAN-1','KAN-2','KAN-3','KAN-4']
+        data={k: issue(k, status='Listo', description=PLAIN) for k in keys}
+        data['KAN-1']=issue('KAN-1', status='En curso')
+        with no_vars_env():
+            chosen, skipped = mod.select('inspect', data.__getitem__, lambda j,l=50: keys, check_github=False, max_issues=3)
+        self.assertEqual([c['issue'] for c in chosen], ['KAN-2','KAN-3','KAN-4'])
+        self.assertEqual(skipped[0]['issue'], 'KAN-1')
+        with self.assertRaisesRegex(mod.GateError, '1 to 3'):
+            mod.select('inspect', data.__getitem__, lambda j,l=50: keys, check_github=False, max_issues=4)
 
     def test_selection_skips_existing_agent_branch(self):
         data=self._backlog()
         def existing(key, branch):
             if key=='KAN-4': raise mod.GateError('Remote branch agent/kan-4 already exists')
         with no_vars_env(), patch.object(mod,'github_existing',side_effect=existing):
-            result, skipped = mod.select('inspect', data.__getitem__, lambda j,l=50: ['KAN-4','KAN-5'])
-        self.assertEqual(result['issue'],'KAN-5'); self.assertEqual(skipped[0]['issue'],'KAN-4')
+            chosen, skipped = mod.select('inspect', data.__getitem__, lambda j,l=50: ['KAN-4','KAN-5'])
+        self.assertEqual([c['issue'] for c in chosen], ['KAN-5']); self.assertEqual(skipped[0]['issue'],'KAN-4')
 
     def test_selection_infra_error_fails_closed(self):
         data=self._backlog()
@@ -242,7 +260,9 @@ class ZeroConfigTests(unittest.TestCase):
                 patch.object(mod,'jira_search_client',return_value=lambda j,l=50: ['KAN-1','KAN-2','KAN-3']):
             self.assertEqual(mod.main(['--issue','','--mode','build']), 0)
             self.assertEqual(mod.main(['--mode','inspect']), 0)
-            self.assertIn('has_work=false', Path(out.name).read_text())
+            txt=Path(out.name).read_text()
+            self.assertIn('has_work=false', txt)
+            self.assertIn('issues=[]', txt)
         os.unlink(out.name)
 
     def test_main_with_explicit_key_still_works(self):
@@ -250,10 +270,27 @@ class ZeroConfigTests(unittest.TestCase):
         with tempfile.NamedTemporaryFile('r', delete=False) as out, no_vars_env(GITHUB_OUTPUT=out.name), \
                 patch.object(mod,'jira_client',return_value=lambda k: issue(k,status='Listo')), \
                 patch.object(mod,'github_existing',return_value=None):
-            self.assertEqual(mod.main(['--issue','kan-9','--mode','inspect']), 0)
+            self.assertEqual(mod.main(['--issue','kan-9','--mode','inspect','--max-issues','3']), 0)
             txt=Path(out.name).read_text()
         os.unlink(out.name)
         self.assertIn('issue=KAN-9', txt); self.assertIn('branch=agent/kan-9', txt); self.assertIn('has_work=true', txt)
+        self.assertIn('issues=["KAN-9"]', txt)
+
+    def test_explicit_key_does_not_search(self):
+        import tempfile
+        def boom(*_a, **_k):
+            raise AssertionError('search must not run when issue_key is set')
+        with tempfile.NamedTemporaryFile('r', delete=False) as out, no_vars_env(GITHUB_OUTPUT=out.name), \
+                patch.object(mod,'jira_client',return_value=lambda k: issue(k,status='Listo')), \
+                patch.object(mod,'jira_search_client',side_effect=boom), \
+                patch.object(mod,'github_existing',return_value=None):
+            self.assertEqual(mod.main(['--issue','KAN-9','--max-issues','9','--mode','build']), 0)
+        os.unlink(out.name)
+
+    def test_max_issues_out_of_range_blocks_before_jira(self):
+        self.assertEqual(mod.main(['--issue','','--max-issues','4','--mode','inspect']), 2)
+        self.assertEqual(mod.main(['--issue','','--max-issues','0','--mode','inspect']), 2)
+        self.assertEqual(mod.main(['--issue','','--max-issues','nope','--mode','inspect']), 2)
 
 
 class WorkflowZeroConfigTests(unittest.TestCase):
@@ -301,7 +338,8 @@ class WorkflowZeroConfigTests(unittest.TestCase):
         self.assertNotIn('git commit', save)
         self.assertNotIn('gh pr', save)
         self.assertIn('uses: actions/upload-artifact@v4', up)
-        self.assertIn('name: opencode-factory-diff', up)
+        self.assertIn('name: opencode-factory-diff-${{ matrix.issue }}', up)
+        self.assertIn('name: opencode-factory-summary-${{ matrix.issue }}', self.wf)
         self.assertIn('retention-days: 7', up)
         self.assertIn('if-no-files-found: ignore', up)
         self.assertNotIn('--total-seconds 1800', self.wf)
@@ -310,5 +348,23 @@ class WorkflowZeroConfigTests(unittest.TestCase):
         for old in ('--total-seconds 2700', '--no-edit-seconds 360'):
             self.assertNotIn(old, self.wf)
         self.assertNotRegex(self.wf, r'--max-reported-input-tokens 800000\b')
+
+    def test_parallel_selection_and_pinned_cli(self):
+        self.assertIn('OPENCODE_VERSION: 1.19.4', self.wf)
+        self.assertNotIn('@latest', self.wf)
+        self.assertNotIn('opencode-ai@latest', self.wf)
+        self.assertIn('opencode-ai@${OPENCODE_VERSION}', self.wf)
+        self.assertIn('max-parallel: 3', self.wf)
+        self.assertIn('fail-fast: false', self.wf)
+        self.assertIn("cron: '0 23 * * *'", self.wf)
+        self.assertIn('DEFAULT_BRANCH="master"', self.wf)
+        self.assertRegex(self.wf, r'(?m)^  select:\s*$')
+        self.assertRegex(self.wf, r'(?m)^  factory:\s*$')
+        self.assertIn('concurrency:', self.wf)
+        self.assertIn('group: opencode-factory-${{ github.repository }}', self.wf)
+        for name in ('opencode-factory-PILOT.yml', 'opencode-connectivity.yml'):
+            text = (ROOT/'.github'/'workflows'/name).read_text(encoding='utf-8')
+            self.assertIn('OPENCODE_VERSION: 1.19.4', text, name)
+            self.assertNotIn('@latest', text, name)
 
 if __name__=='__main__': unittest.main()

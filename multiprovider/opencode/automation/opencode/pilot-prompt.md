@@ -1,6 +1,8 @@
 MANUAL SINGLE-ISSUE PILOT. You MUST be the named `factory-orchestrator` agent.
 Process EXACTLY Jira key __ISSUE_KEY__ in repository __GITHUB_REPOSITORY__
 (given by the human or selected deterministically by the runner; never pick another).
+This invocation is exactly one issue. The workflow may start up to 3 such
+invocations in parallel; do not pick or refill another issue.
 
 Use your project .opencode/agents/factory-orchestrator.md contract. The runner
 has independently validated the issue and created the feature branch.

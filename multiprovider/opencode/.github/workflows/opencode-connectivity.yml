@@ -3,6 +3,10 @@ name: OpenCode - Connectivity Test
 on:
   workflow_dispatch:
 
+# Same pin as opencode-factory.yml (opencode-ai at OPENCODE_VERSION, not the floating dist-tag).
+env:
+  OPENCODE_VERSION: 1.19.4
+
 permissions:
   contents: read
 
@@ -20,7 +24,7 @@ jobs:
 
       - name: Install OpenCode
         run: |
-          npm install -g opencode-ai
+          npm install -g "opencode-ai@${OPENCODE_VERSION}"
           opencode --version
 
       - name: Check Jira credentials
