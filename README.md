@@ -19,6 +19,8 @@ Este repo guarda los **contratos, agentes y workflows** de la factoría. Lo que 
 - [Troubleshooting](#troubleshooting)
 - [Referencias](#referencias)
 
+Próximas iniciativas (propuestas): [ROADMAP.md](ROADMAP.md).
+
 ## Cómo funciona
 
 ```text
