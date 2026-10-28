@@ -9,7 +9,7 @@
 | # | Iniciativa | Impacto | Encaje | Esfuerzo | Prioridad | Estado |
 |---|---|---|---|---|---|---|
 | 1 | OpenAI como proveedor | por decidir | por decidir | por decidir | por decidir | Propuesto |
-| 2 | Factoría multirrepo | por decidir | por decidir | por decidir | por decidir | Propuesto |
+| 2 | Factoría multirrepo (Jira como fuente única) | por decidir | por decidir | por decidir | por decidir | Propuesto (dirección elegida) |
 | 3 | Propagación automática de contratos por PR | por decidir | por decidir | por decidir | por decidir | Propuesto |
 
 ---
@@ -45,32 +45,43 @@
 
 ## 2. Factoría multirrepo
 
-**Objetivo.** Que un solo run u orquestador trabaje stories de varios repos. Así hay que instalar y mantener una vez en lugar de una por repo, y el backlog de Jira se puede planificar de forma global. Hoy cada repo tiene su instalación. El repo sale del propio repo o de la línea `Repository:` de la story, y si la story apunta a otro repo, se rechaza.
+**Objetivo.** Que un solo Jira gestione n repositorios y que el pool de tareas se distribuya entre ellos. Así hay un único backlog priorizado para todo el producto, en lugar de un Jira o un filtro por repo, y la capacidad de la factoría se reparte según el Rank global. Hoy cada repo tiene su instalación. El repo sale del propio repo o de la línea `Repository:` de la story, y si la story apunta a otro repo, se rechaza.
+
+**Dirección elegida por Álvaro:** usar Jira como fuente única.
+- Hay **un solo proyecto o backlog** de Jira.
+- **Cada story indica su repo destino.**
+- **El pool de stories elegibles se reparte entre los repos.**
+
+El diseño técnico de cómo se hace sigue abierto.
 
 **Alcance inicial**
-- Que el valor de `Repository:` deje de servir solo para rechazar la story y pase a decidir dónde se trabaja, dentro de una lista de repos permitidos.
-- Seguir con un Draft PR por story en el repo que corresponda.
-- Mantener las reglas actuales sin cambios: rama desde la rama por defecto de cada repo, `AGENTS.md` propio de cada repo y blockers en Finalizada.
+- Que el repo destino de la story deje de servir solo para rechazarla y pase a decidir en qué repo se trabaja, dentro de una lista de repos permitidos.
+- Repartir el pool de stories elegibles (Listo + `agent-ready` + engine + blockers en Finalizada, por Rank) entre los repos, sin que dos runs cojan la misma story.
+- Seguir con un Draft PR por story en su repo destino.
+- Mantener las reglas actuales: rama desde la rama por defecto de cada repo, `AGENTS.md` propio de cada repo y routing exclusivo por `engine-*`.
 
 **Piezas del repo afectadas**
-- `jira_gate.py`: hoy toma `GITHUB_REPOSITORY` como referencia y falla con «A declaration that names ANOTHER repo fails». También comprueba la rama remota y los PR abiertos en ese mismo repo.
+- `jira_gate.py`: hoy toma `GITHUB_REPOSITORY` como referencia y rechaza la story si declara otro repo («A declaration that names ANOTHER repo fails»). También comprueba la rama remota y los PR abiertos en ese mismo repo. La JQL actual filtra por proyecto y etiquetas, no por repo.
 - `guarded_run.py` y `pilot-prompt.md`: sustituyen `__GITHUB_REPOSITORY__` por el repo del workflow.
-- `multiprovider/opencode/.github/workflows/opencode-factory.yml`: `concurrency: opencode-factory-${{ github.repository }}` y `GITHUB_TOKEN` del propio repo, con `contents: write` solo en ese repo.
-- `PORTABLE-CONTRACT.md` y los contratos de Claude y Cursor, que dicen «work only in the EXACT selected `owner/repo`» y «one non-overlapping run per engine/repo».
-- `multiprovider/jira/ROUTING.md`, en la parte de la plantilla `Repository:`.
+- `multiprovider/opencode/.github/workflows/opencode-factory.yml`: `concurrency: opencode-factory-${{ github.repository }}`, el `GITHUB_TOKEN` del propio repo y el job `select`, que hoy elige hasta 3 stories para ese repo.
+- `PORTABLE-CONTRACT.md` y los contratos de Claude y Cursor: «work only in the EXACT selected `owner/repo`», «one non-overlapping run per engine/repo» y «at most 3 issues per batch».
+- `multiprovider/jira/ROUTING.md`: la plantilla `Repository:` y la JQL por provider.
 
 **Dependencias y riesgos**
-- **Permisos:** el `GITHUB_TOKEN` de Actions solo vale para su propio repo. Haría falta un PAT o una GitHub App, lo que amplía mucho el alcance de las credenciales.
-- **Concurrencia:** hoy el bloqueo es por engine y repo, y el estado de Jira no sirve como lock atómico. Habría que volver a definir cómo se evita trabajar la misma story dos veces.
-- **Contexto:** cada repo tiene su `AGENTS.md`, sus tests y su entorno, así que el builder necesita un checkout limpio por repo.
-- Es más fácil que una story mal etiquetada acabe en el repo equivocado.
+- **Reparto y concurrencia:** el estado de Jira no es un lock atómico. Si varios runs leen el mismo pool, hace falta una regla de reparto que impida que dos runs cojan la misma story.
+- **Dependencias entre repos:** una story de un repo puede depender de otra de otro repo. La puerta actual (blockers en Finalizada) ya funciona por key de Jira, pero hay que confirmar que se mantiene igual.
+- **Credenciales:** el `GITHUB_TOKEN` de Actions solo sirve para su propio repo. Un orquestador central necesitaría un PAT o una GitHub App con un alcance mucho más amplio.
+- **Errores de etiquetado:** una story sin repo destino, o con un repo que no está en la lista permitida, debe saltarse y no ir a un repo por defecto.
+- **Contexto por repo:** cada repo tiene su `AGENTS.md`, sus tests y su entorno.
 
 **Preguntas abiertas para Álvaro**
-1. ¿Dónde vive el orquestador: en un repo central o en uno de los repos de producto?
-2. ¿La lista de repos permitidos está en este repo, en Jira o en otro sitio?
-3. ¿El límite de stories por run es global o por repo?
-4. ¿Qué identidad usamos para escribir en los demás repos: GitHub App, PAT o la integración de cada provider?
-5. ¿Aplica a los tres providers a la vez o empezamos por uno?
+1. **¿Cómo se marca el repo en la story?** ¿Con la línea `Repository:` de la descripción (como ahora), con un campo propio de Jira (ya existe el hueco `JIRA_REPOSITORY_FIELD_ID`), con componentes o con etiquetas?
+2. **¿Quién reparte?** ¿Cada repo mantiene su instalación y coge solo las stories cuyo repo destino es el suyo, o hay un orquestador central que lee el pool y reparte?
+3. **¿El límite de 3 por run es por repo o global?** Y si es global, ¿cómo se reparte entre repos: solo por Rank, o con un cupo o turno por repo?
+4. **Dependencias entre stories de repos distintos:** ¿basta con exigir el blocker en Finalizada, o hace falta algo más (orden de merge, versiones)?
+5. **Credenciales:** si hay un orquestador central, ¿con qué identidad escribe en cada repo (GitHub App, PAT o la integración de cada provider)?
+6. ¿Dónde vive la lista de repos permitidos: en este repo, en Jira o en otro sitio?
+7. ¿Aplica a los tres providers a la vez o empezamos por uno?
 
 ---
 
