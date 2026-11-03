@@ -1,8 +1,8 @@
-# Factoría agéntica Jira → PR (Claude · Cursor · OpenCode)
+# Factoría agéntica Jira → PR (Claude · Cursor · OpenCode · Codex)
 
 Este repo guarda los **contratos, agentes y workflows** de la factoría. Lo que hay aquí se copia a cada repo de producto. Aquí no hay código de producto: un humano diseña y aprueba las stories en Jira, y los agentes las implementan, se revisan y dejan un **Draft PR** para revisión humana.
 
-> Estado: Claude v6.1 con routing estricto, Cursor v3 (builders en paralelo en worktrees) y OpenCode v3 (hasta 3 issues por run, en paralelo, Kimi K3.1 Pro + DeepSeek V4.1 Flash). Los detalles de cada provider están en [`multiprovider/README.md`](multiprovider/README.md).
+> Estado: Claude v6.1 con routing estricto, Cursor v3 (builders en paralelo en worktrees), OpenCode v3 (hasta 3 issues por run, en paralelo, Kimi K3.1 Pro + DeepSeek V4.1 Flash) y Codex en piloto manual (GitHub Actions, sin cron, `gpt-6.1-sol`). Los detalles de cada provider están en [`multiprovider/README.md`](multiprovider/README.md).
 
 ## Índice
 
@@ -15,6 +15,7 @@ Este repo guarda los **contratos, agentes y workflows** de la factoría. Lo que 
   - [Claude](#1-claude-routine-diaria)
   - [Cursor](#2-cursor-automation-v3)
   - [OpenCode](#3-opencode-github-actions-v3)
+  - [Codex](#4-codex-github-actions-piloto)
 - [Política de AGENTS.md](#política-de-agentsmd)
 - [Troubleshooting](#troubleshooting)
 - [Referencias](#referencias)
@@ -41,24 +42,25 @@ Jira (Listo + agent-ready + engine-<provider>, blockers en Finalizada)
 
 ## Providers
 
-Cada story se asigna a **un solo** provider con una etiqueta de Jira: `engine-claude`, `engine-cursor` o `engine-opencode`. Si una story tiene cero etiquetas, o más de una, **todos** los providers la saltan. El detalle está en [`multiprovider/jira/ROUTING.md`](multiprovider/jira/ROUTING.md).
+Cada story se asigna a **un solo** provider con una etiqueta de Jira: `engine-claude`, `engine-cursor`, `engine-opencode` o `engine-openai`. Si una story tiene cero etiquetas, o más de una, **todos** los providers la saltan. El detalle está en [`multiprovider/jira/ROUTING.md`](multiprovider/jira/ROUTING.md).
 
-| | **Claude** | **Cursor** | **OpenCode** |
-|---|---|---|---|
-| Dónde corre | Claude Code Routine (nube) | Cursor Cloud Agent mediante **una** Automation programada | GitHub Actions (`ubuntu-latest`) |
-| Orquestador | Opus (contrato en la Routine) | Modelo elegido en la Automation (contrato pegado en su prompt) | **Kimi K3.1 Pro**: `opencode-go/kimi-k3.1-pro`, `steps: 40` |
-| Builder | Sonnet (`.claude/agents/feature-builder.md`) | `.cursor/agents/feature-builder.md` (`model: inherit`) | **DeepSeek V4.1 Flash**: `opencode-go/deepseek-v4.1-flash`, **sin límite de pasos** (no tiene clave `steps`) |
-| Reviewer | Opus, solo lectura (`.claude/agents/pr-reviewer.md`) | `.cursor/agents/pr-reviewer.md` (`model: inherit`, `readonly: true`) | **Kimi K3.1 Pro**, `steps: 15`, comandos de solo lectura |
-| Stories por run | Hasta 3 por Rank, en paralelo (worktrees) | Hasta 3 por Rank (`BATCH_LIMIT=3`), builders en paralelo en worktrees `/tmp/<KEY>-wt` que crea el orquestador | **Hasta 3** por Rank, en paralelo (matriz de jobs, `max-parallel: 3`, `fail-fast: false`); la selección es sin LLM |
-| Disparo | Un único trigger *Schedule → Daily* en la UI de Claude Routines | Un único trigger *Schedule* diario en la Automation, escalonado respecto a Claude | `cron: '0 23 * * *'` (UTC), que son las 00:00 Europe/Madrid en invierno (CET), más `workflow_dispatch` manual |
-| Rondas de corrección | Máximo 3 | Máximo 3, cada una con un reviewer nuevo | Máximo 1, y solo si se puede retomar el mismo builder y la misma rama |
-| Rama | Worktree del builder | `cursor/<KEY>-<slug>` | `agent/<key-en-minúsculas>` |
-| Límites | Cuota de la suscripción de Claude | Uso medido de Cloud Agents (requiere un plan con Cloud Agents y Automations) | Cuota de OpenCode Go por modelo. El watchdog para a los 900 s sin editar, a los 20400 s de total (5 h 40 min) o a los 5.000.000 de tokens de entrada informados. El job tiene un timeout de 355 min y un 429 lo para sin reintentar |
+| | **Claude** | **Cursor** | **OpenCode** | **Codex (piloto)** |
+|---|---|---|---|---|
+| Dónde corre | Claude Code Routine (nube) | Cursor Cloud Agent mediante **una** Automation programada | GitHub Actions (`ubuntu-latest`) | GitHub Actions (`ubuntu-latest`) |
+| Orquestador | Opus (contrato en la Routine) | Modelo elegido en la Automation (contrato pegado en su prompt) | **Kimi K3.1 Pro**: `opencode-go/kimi-k3.1-pro`, `steps: 40` | **`gpt-6.1-sol`** vía `openai/codex-action` (el job `select` previo no usa LLM) |
+| Builder | Sonnet (`.claude/agents/feature-builder.md`) | `.cursor/agents/feature-builder.md` (`model: inherit`) | **DeepSeek V4.1 Flash**: `opencode-go/deepseek-v4.1-flash`, **sin límite de pasos** (no tiene clave `steps`) | Subagente `feature-builder`, **`gpt-6.1-sol`** |
+| Reviewer | Opus, solo lectura (`.claude/agents/pr-reviewer.md`) | `.cursor/agents/pr-reviewer.md` (`model: inherit`, `readonly: true`) | **Kimi K3.1 Pro**, `steps: 15`, comandos de solo lectura | Segunda invocación `codex exec --sandbox read-only`, **`gpt-6.1-sol`** |
+| Stories por run | Hasta 3 por Rank, en paralelo (worktrees) | Hasta 3 por Rank (`BATCH_LIMIT=3`), builders en paralelo en worktrees `/tmp/<KEY>-wt` que crea el orquestador | **Hasta 3** por Rank, en paralelo (matriz de jobs, `max-parallel: 3`, `fail-fast: false`); la selección es sin LLM | Hasta 3 (`max-parallel: 3`, `fail-fast: false`). En el piloto el máximo por defecto es **1** |
+| Disparo | Un único trigger *Schedule → Daily* en la UI de Claude Routines | Un único trigger *Schedule* diario en la Automation, escalonado respecto a Claude | `cron: '0 23 * * *'` (UTC), que son las 00:00 Europe/Madrid en invierno (CET), más `workflow_dispatch` manual | Solo `workflow_dispatch`. Sin cron |
+| Rondas de corrección | Máximo 3 | Máximo 3, cada una con un reviewer nuevo | Máximo 1, y solo si se puede retomar el mismo builder y la misma rama | El piloto no corrige solo: `CHANGES_REQUESTED` deja el Draft y no pasa a Human Review |
+| Rama | Worktree del builder | `cursor/<KEY>-<slug>` | `agent/<key-en-minúsculas>` | `codex/<key-en-minúsculas>` desde `origin/master` |
+| Límites | Cuota de la suscripción de Claude | Uso medido de Cloud Agents (requiere un plan con Cloud Agents y Automations) | Cuota de OpenCode Go por modelo. El watchdog para a los 900 s sin editar, a los 20400 s de total (5 h 40 min) o a los 5.000.000 de tokens de entrada informados. El job tiene un timeout de 355 min y un 429 lo para sin reintentar | API key por tokens. CLI fijado en `0.166.0`. El job de build tiene un timeout de 120 min. Sin sandbox sin límites |
 
 Notas:
 - **Cursor v3 (opción B, en paralelo).** El orquestador hace `git fetch origin` y congela `BASE_COMMIT = origin/master`. Para cada story crea `git worktree add /tmp/<KEY>-wt -b cursor/<KEY>-<slug> <BASE_COMMIT>` y la verifica con `worktree list`, `show-toplevel`, la rama y `HEAD == BASE_COMMIT`. **Esa verificación es la prueba de aislamiento.** Lanza los builders a la vez y comprueba que el checkout padre sigue limpio (`git status --porcelain`). Para el reviewer, obtiene el diff con git autenticado (`git fetch origin pull/<N>/head`) y se lo pasa en un fichero `.review/pr-<N>-<HEAD>.diff`.
 - **OpenCode v3.** El job `select` (sin LLM) hace el preflight de modelos y elige hasta 3 stories. `check_config.py` reintenta `opencode models opencode-go` hasta 3 veces, con 60 s entre intentos, y si bloquea nombra todos los modelos que faltan, sin sustituirlos. `jira_gate.py` valida la elegibilidad **sin gastar tokens**. El job `factory` es una matriz (`max-parallel: 3`, `fail-fast: false`): cada story tiene su runner, los mismos topes y un `opencode run` vigilado por `guarded_run.py`. `postflight.py` comprueba que existen el Draft PR, el marcador de review en el HEAD y Jira en Human Review. Si un job falla, el diff del builder se guarda como artefacto `opencode-factory-diff-<KEY>` (`.patch`, 7 días) sin hacer push; las otras stories siguen.
 - **Cron de OpenCode y horario de verano.** GitHub Actions interpreta el cron en UTC. En verano (CEST), las 00:00 de Madrid serían `'0 22 * * *'`. No añadas un segundo schedule que se solape con las ventanas de Claude o Cursor.
+- **Codex (piloto).** El job `select` elige sin LLM, igual que OpenCode, pero solo stories `engine-openai` y con `max_issues` por defecto 1. El orquestador LLM recomprueba el gate por MCP, lanza un `feature-builder` y publica el Draft PR. El reviewer no es un subagente: otra invocación de `codex exec` corre en sandbox de solo lectura. Los modelos por defecto son `gpt-6.1-sol`; cambiarlos exige alinear las variables del workflow con `.codex/config.toml` y `.codex/agents/feature-builder.toml`. No hay cron hasta que el piloto lo justifique.
 
 ## Reglas comunes (todos los providers)
 
@@ -67,7 +69,7 @@ Notas:
 - **Puerta de dependencias (falla en cerrado).** Cada blocker real (`is blocked by` / `depends on`) tiene que estar **en Finalizada/Done ahora mismo**. No sirven Human Review, Resolved, `statusCategory = Done` ni un PR mergeado. Si faltan datos, la story se salta. Una issue que la candidata *bloquea* no es un prerequisito. Las stories saltadas se quedan en Listo.
 - **Ramas:** siempre desde `origin/master` justo después de un `git fetch` fresco. Nunca desde un `master` local antiguo ni desde otra rama de feature.
 - **PRs:** siempre en **Draft**. Jira solo pasa a **Human Review** con un PASS del reviewer independiente en el HEAD actual del PR.
-- **Configuración cero en OpenCode:** no hay variables nuevas obligatorias ni `issue_key` obligatorio, y las stories no se tocan. Si una story no declara `Repository:`, `Repositorio:` o `Repositorio destino:`, se usa el repo del propio workflow, y una story que nombre otro repo se rechaza. El proyecto Jira por defecto es **`KAN`**. Cursor deduce `owner/repo` del entorno de la Automation. Claude exige que el repo de la story coincida con el de la Routine.
+- **Configuración cero en OpenCode y en Codex:** no hay variables nuevas obligatorias ni `issue_key` obligatorio, y las stories no se tocan. Si una story no declara `Repository:`, `Repositorio:` o `Repositorio destino:`, se usa el repo del propio workflow, y una story que nombre otro repo se rechaza. El proyecto Jira por defecto es **`KAN`**. Los estados por defecto son Listo/Ready, Finalizada/Done y Human Review. Cursor deduce `owner/repo` del entorno de la Automation. Claude exige que el repo de la story coincida con el de la Routine.
 - **Una sola ejecución por provider y repo.** El estado de Jira no es un lock atómico, así que los horarios deben ser distintos y no solaparse.
 
 ## Jira: cómo funciona y cómo llega la tarea a los builders
@@ -94,7 +96,7 @@ flowchart LR
 | **Descripción** | Diseño técnico y funcional aprobado, **criterios de aceptación** y pruebas. No hay un campo propio para los criterios: van en la descripción | Todos. El gate de OpenCode **rechaza** descripciones de menos de 60 caracteres |
 | **Repositorio** | Línea `Repository: owner/repo` (OpenCode también acepta `Repositorio:` y `Repositorio destino:`) o un campo propio (`JIRA_REPOSITORY_FIELD_ID`) | OpenCode: si falta, usa el repo del workflow, y si nombra otro repo, la story se rechaza. Cursor: tiene que coincidir con el `owner/repo` de la Automation. Claude: la coincidencia del repo es obligatoria |
 | **Dependencias** | *Linked issues* `is blocked by` / `depends on`, una sección `Dependencies:` / `Dependencias:` en la descripción, frases como «blocked by», «depende de» o «bloqueado por», o un campo propio (`JIRA_DEPENDENCIES_FIELD_ID`) | Todos usan la unión de todas las fuentes. La dirección del enlace importa: lo que la story *bloquea* no es un prerequisito. Si el sentido es ambiguo, la story se salta |
-| **Routing (etiquetas)** | `agent-ready` + **una sola** de `engine-claude`, `engine-cursor` o `engine-opencode` | Cada provider solo coge la suya. Si hay cero o varias etiquetas engine, la saltan todos |
+| **Routing (etiquetas)** | `agent-ready` + **una sola** de `engine-claude`, `engine-cursor`, `engine-opencode` o `engine-openai` | Cada provider solo coge la suya. Si hay cero o varias etiquetas engine, la saltan todos |
 | **Estado** | `status.name` | Solo cuenta Listo/Ready para elegir y Finalizada/Done para los blockers |
 
 ### Estados y quién los mueve
@@ -130,7 +132,7 @@ flowchart LR
 
 ### Ejemplo de story bien formada
 
-Etiquetas: `agent-ready`, `engine-opencode` (o `engine-claude` / `engine-cursor`). Estado: **Listo**. Si depende de otra story, añade también el enlace *is blocked by* en *Linked issues*. La plantilla sigue la de [`multiprovider/jira/ROUTING.md`](multiprovider/jira/ROUTING.md); la tarea es solo un ejemplo.
+Etiquetas: `agent-ready`, `engine-opencode` (o `engine-claude` / `engine-cursor` / `engine-openai`). Estado: **Listo**. Si depende de otra story, añade también el enlace *is blocked by* en *Linked issues*. La plantilla sigue la de [`multiprovider/jira/ROUTING.md`](multiprovider/jira/ROUTING.md); la tarea es solo un ejemplo.
 
 ```text
 Resumen: Añadir el campo «Código» como fallback del identificador de licitación
@@ -181,6 +183,12 @@ multiprovider/
     automation/opencode/{check_config,jira_gate,guarded_run,postflight}.py, pilot-prompt.md
     tests/                    # pruebas unitarias (python -m pytest -q tests)
     V3-README.md, MIGRACION.md, PRUEBAS-Y-ARRANQUE-LIMPIO.md, SETUP-AND-LIMITATIONS.md
+  codex/                      # refleja la raíz de un repo de producto
+    .codex/config.toml        # perfil factory-build (approval_policy never, red con allowlist, MCP Jira)
+    .codex/agents/feature-builder.toml
+    .github/workflows/codex-factory.yml   # piloto: solo workflow_dispatch
+    automation/codex/         # jira_gate, check_config, prompts, postflight, publish_review
+    tests/
 ```
 
 ## Guía de instalación en un repo de producto
@@ -189,7 +197,7 @@ Al repo de producto se copian los archivos del provider **con sus mismas rutas**
 
 ### 0. Jira (una vez, común a todos)
 
-1. En el proyecto **KAN**, cada story lista lleva `agent-ready` y **una** etiqueta `engine-claude`, `engine-cursor` o `engine-opencode`.
+1. En el proyecto **KAN**, cada story lista lleva `agent-ready` y **una** etiqueta `engine-claude`, `engine-cursor`, `engine-opencode` o `engine-openai`.
 2. Las dependencias van en *Linked issues → is blocked by / depends on*.
 3. Plantilla de la story y JQL de ejemplo: [`multiprovider/jira/ROUTING.md`](multiprovider/jira/ROUTING.md).
 4. Las transiciones In Progress, AI Review, Human Review y Blocked tienen que existir para el orquestador. Finalizada la pone el humano después del merge.
@@ -262,10 +270,54 @@ Al repo de producto se copian los archivos del provider **con sus mismas rutas**
 
 Para migrar desde paquetes anteriores, mira [`MIGRACION.md`](multiprovider/opencode/MIGRACION.md). La matriz de pruebas está en [`PRUEBAS-Y-ARRANQUE-LIMPIO.md`](multiprovider/opencode/PRUEBAS-Y-ARRANQUE-LIMPIO.md) y el detalle en [`V3-README.md`](multiprovider/opencode/V3-README.md).
 
+### 4. Codex (GitHub Actions, piloto)
+
+El piloto es manual. No tiene cron y no exige una variable de activación ni un `issue_key`. El job `select` elige por Rank las stories en Listo con `agent-ready` y solo `engine-openai`. Si lanzas el workflow con `issue_key`, solo entra esa story.
+
+1. Desde `multiprovider/codex/`, copia a la raíz del repo de producto, con las mismas rutas:
+   ```text
+   .codex/config.toml
+   .codex/agents/feature-builder.toml
+   .github/workflows/codex-factory.yml
+   automation/codex/check_config.py
+   automation/codex/jira_gate.py
+   automation/codex/postflight.py
+   automation/codex/publish_review.py
+   automation/codex/prepare_codex_home.py
+   automation/codex/prepare_review.py
+   automation/codex/render_prompt.py
+   automation/codex/safety.py
+   automation/codex/orchestrator-prompt.md
+   automation/codex/reviewer-prompt.md
+   automation/codex/review-schema.json
+   ```
+   Opcional: `tests/`. No sustituyas el `AGENTS.md` del repo de producto: Codex lo lee, no lo trae este paquete. No borres los agentes de Claude, Cursor u OpenCode.
+2. En **GitHub → Settings → Secrets and variables → Actions** deja los mismos datos de Jira que OpenCode, más la clave de OpenAI:
+
+   | Tipo | Nombre | Obligatorio | Uso |
+   |---|---|---|---|
+   | Secret | `OPENAI_API_KEY` | Sí | La action la recibe por `openai-api-key`. No la pongas como variable de entorno del job |
+   | Secret | `JIRA_USERNAME` | Sí | Usuario (email) de Jira |
+   | Secret | `JIRA_API_TOKEN` | Sí | API token de Jira. La cuenta solo necesita el proyecto KAN |
+   | Variable | `JIRA_URL` | Sí | URL del sitio Jira (`https://…`) |
+   | Variable | `JIRA_PROJECT_KEY` | No (por defecto `KAN`) | Proyecto Jira |
+   | Variable | `JIRA_HUMAN_REVIEW_STATUS` | No (por defecto `Human Review`) | Estado final |
+   | Variable | `JIRA_REPOSITORY_FIELD_ID`, `JIRA_DEPENDENCIES_FIELD_ID` | No | Solo si usas campos propios |
+
+   El `GITHUB_TOKEN` lo pone Actions. `select` pide lectura de `contents` y `pull-requests`. `factory` pide escritura de `contents` y `pull-requests`, y nada más.
+3. **OBLIGATORIO: dejar que GitHub Actions cree PRs.** En el repo de producto ve a **Settings → Actions → General → Workflow permissions**, marca **«Allow GitHub Actions to create and approve pull requests»** y pulsa **Save**. Sin eso, el Draft PR no se crea. Los PRs abiertos con el `GITHUB_TOKEN` no disparan otros workflows.
+4. Haz commit y push a la rama por defecto del producto. El workflow aparece como **Actions → «Codex Factory - pilot»**.
+5. **Primero `inspect`, sin modelo.** *Run workflow* con `mode=inspect`, `issue_key` vacío (o una key) y `max_issues` en 1. El job `select` comprueba el perfil, que el CLI fijado arranca, los secretos y la elegibilidad en Jira. No llama al modelo y no mueve estados. Si no hay story elegible, termina en verde con `NO_WORK`.
+6. **Después `build`, con una story.** *Run workflow* con `mode=build` y, la primera vez, `max_issues=1` o un `issue_key` de una story pequeña `engine-openai`. Cada story sale de `origin/master` en `codex/<key>`, el orquestador publica un Draft PR (`Factory Engine: openai`) y un segundo `codex exec` en sandbox de solo lectura escribe el veredicto. Solo un PASS sobre el HEAD actual pasa Jira a Human Review. Los artefactos son `codex-factory-diff-<KEY>` y `codex-factory-summary-<KEY>`.
+
+Modelos por defecto: orquestador, builder y reviewer `gpt-6.1-sol`. Están comentados en el workflow como elección provisional. Para cambiar el orquestador o el reviewer, cambia la variable y el `model` de `.codex/config.toml` a la vez. Para el builder, la variable `CODEX_BUILDER_MODEL` tiene que ser el mismo `model` de `.codex/agents/feature-builder.toml`. `check_config.py` no sustituye un modelo por otro.
+
+Queda por ver en ese primer build si el MCP de Jira (proceso local `uvx mcp-atlassian`) tiene red dentro del perfil. Si no arranca, el run falla: el servidor está marcado como obligatorio.
+
 ## Política de AGENTS.md
 
-- Solo el **orquestador** (Opus en Claude, el orquestador de Cursor) puede editar un `AGENTS.md` **existente**. Lo hace en la rama o worktree de **esa** story, con cambios mínimos y basados en lo implementado, y el cambio va en el **mismo** Draft PR. El builder de OpenCode tampoco puede editarlo.
-- Los builders y reviewers nunca editan `AGENTS.md`, `CLAUDE.md`, `.claude/`, `.cursor/`, `.opencode/`, `.github/` ni secrets.
+- Solo el **orquestador** (Opus en Claude, el orquestador de Cursor y el orquestador de Codex) puede editar un `AGENTS.md` **existente**. Lo hace en la rama o worktree de **esa** story, con cambios mínimos y basados en lo implementado, y el cambio va en el **mismo** Draft PR. El builder de OpenCode tampoco puede editarlo, ni el `feature-builder` de Codex.
+- Los builders y reviewers nunca editan `AGENTS.md`, `CLAUDE.md`, `.claude/`, `.cursor/`, `.opencode/`, `.codex/`, `.github/` ni secrets.
 - Una convención razonable pero no aprobada se deja como `PROPOSED` en un comentario. Si no hay nada que cambiar, `NONE` sin comentarios.
 
 ## Troubleshooting
@@ -273,7 +325,9 @@ Para migrar desde paquetes anteriores, mira [`MIGRACION.md`](multiprovider/openc
 | Síntoma | Causa probable / qué hacer |
 |---|---|
 | El run termina en verde sin hacer nada (`NO_WORK`) | No hay ninguna story en Listo + `agent-ready` con la etiqueta `engine-*` de ese provider, o todas tienen blockers que no están en Finalizada. |
-| `GATE_BLOCKED` (OpenCode) | La story no está exactamente en Listo/Ready, tiene una etiqueta engine que no toca o más de una, apunta a otro repo, un blocker no está en Finalizada, o ya existe rama o PR. Corrige solo lo que diga el error. |
+| `GATE_BLOCKED` (OpenCode o Codex) | La story no está exactamente en Listo/Ready, tiene una etiqueta engine que no toca o más de una, apunta a otro repo, un blocker no está en Finalizada, o ya existe rama o PR. Corrige solo lo que diga el error. |
+| `CONFIG_BLOCKED` (Codex) | Falta un secreto, el perfil no coincide con el contrato, el modelo del fichero no es el de la variable, o `codex --version` no es el pin. No se sustituye el modelo. |
+| `POSTFLIGHT_BLOCKED` (Codex) | El PR no es Draft contra `master`, el PASS no es del HEAD actual, Jira no está en Human Review, el diff toca una ruta protegida (`.github/`, `.codex/`, `automation/codex/`, …) o el texto publicado contiene material de un secreto. |
 | `CONFIG_BLOCKED` (OpenCode) | Falta un agente o su modelo no coincide, tras 3 intentos (60 s) los IDs siguen sin aparecer en `opencode models opencode-go` (el error nombra todos los que faltan y no sustituye ninguno), falta `OPENCODE_GO_API_KEY`, `ENABLE_OPENCODE_FACTORY_PILOT=false`, o no existe `origin/master`. |
 | `BLOCKED_NO_PROGRESS_TIMEBOUND` / `BLOCKED_QUOTA_429` | 900 s sin editar o cuota agotada. No hay reintento de esa story. Revisa la cuota en la consola Go. El diff parcial está en el artefacto `opencode-factory-diff-<KEY>`. Las otras stories de la matriz siguen. |
 | `POSTFLIGHT_BLOCKED` | No se creó el Draft PR, o el PASS no corresponde al HEAD actual. Jira no pasa a Human Review. |
@@ -281,11 +335,12 @@ Para migrar desde paquetes anteriores, mira [`MIGRACION.md`](multiprovider/openc
 | Cursor marca una story `CONFIG_BLOCKED` o `BLOCKED` por worktree | Falló `git worktree add` o su verificación, o un builder escribió en el checkout padre. Las demás stories siguen. |
 | Una story con blocker «mergeado» no arranca | Es lo esperado: el blocker tiene que estar en **Finalizada**, y eso lo pone el humano después del merge. |
 | El run falla al crear el Draft PR: `GraphQL: GitHub Actions is not permitted to create or approve pull requests (createPullRequest)` | Falta el permiso del repo. Ve a **Settings → Actions → General → Workflow permissions**, marca «Allow GitHub Actions to create and approve pull requests» y pulsa **Save** (paso 3 de OpenCode). La rama ya está en el remoto: comprueba que no haya quedado un PR a medias y relanza. Si la rama existente hace que el gate bloquee la story, bórrala o publica el PR a mano. |
-| Los PR creados por OpenCode no lanzan CI | Un PR abierto con el `GITHUB_TOKEN` de Actions puede no disparar otros workflows. No des el CI por aprobado sin checks reales. |
+| Los PR creados por OpenCode o Codex no lanzan CI | Un PR abierto con el `GITHUB_TOKEN` de Actions puede no disparar otros workflows. No des el CI por aprobado sin checks reales. |
 
 ## Referencias
 
 - Claude Routines: https://code.claude.com/docs/en/routines
 - Cursor: [Subagents](https://cursor.com/docs/subagents) · [Cloud Agents](https://cursor.com/docs/cloud-agent) · [Automations](https://cursor.com/docs/cloud-agent/automations) · [Jira](https://cursor.com/docs/integrations/jira)
 - OpenCode: [Agents](https://opencode.ai/docs/agents/) · [CLI](https://opencode.ai/docs/cli/) · [Go](https://opencode.ai/docs/go/) · [GitHub](https://opencode.ai/docs/github/)
+- Codex: [CLI](https://developers.openai.com/codex/cli/reference) · [Non-interactive](https://developers.openai.com/codex/noninteractive) · [Permissions](https://developers.openai.com/codex/permissions) · [MCP](https://developers.openai.com/codex/mcp) · [Subagents](https://developers.openai.com/codex/subagents) · [GitHub Action](https://github.com/openai/codex-action) · [gpt-6.1-sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol)
 - Modelo de enlaces de Jira: https://developer.atlassian.com/cloud/jira/platform/issue-linking-model/

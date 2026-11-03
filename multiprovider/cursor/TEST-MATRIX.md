@@ -6,7 +6,7 @@ Do not activate the daily schedule until the first small controlled test has pas
 | --- | --- | --- |
 | Routing absent | Ready + agent-ready, no engine label | SKIP, no Jira transition or PR |
 | Routing conflicted | Ready with engine-cursor AND engine-claude | SKIP |
-| Other provider | Ready with engine-opencode | SKIP |
+| Other provider | Ready with engine-opencode or engine-openai | SKIP |
 | Repo mismatch | Ready engine-cursor, different Repository | SKIP |
 | Blocker open | A is Ready, depends on B in Human Review | SKIP A, leave Ready |
 | Blocker exact Done | A depends on B with current status.name Done | A eligible if remaining gates pass |

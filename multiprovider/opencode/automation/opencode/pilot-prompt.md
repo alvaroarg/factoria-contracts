@@ -6,7 +6,7 @@ invocations in parallel; do not pick or refill another issue.
 
 Use your project .opencode/agents/factory-orchestrator.md contract. The runner
 has independently validated the issue and created the feature branch.
-Independently recheck Jira approved spec, agent-ready, engine-opencode, repo,
+Independently recheck Jira approved spec, agent-ready, exactly one engine label and it must be engine-opencode (`engine-claude`, `engine-cursor`, and `engine-openai` are ineligible, including together with engine-opencode), repo,
 Ready status, links and live status of every blocker. Any blocker other than
 Done/Finalizada means SKIP WITHOUT CLAIMING IT. A story that declares no
 Repository/Repositorio targets __GITHUB_REPOSITORY__; one naming another repo is ineligible.
