@@ -1,0 +1,374 @@
+name: Codex Factory - pilot
+
+# Piloto manual. No hay cron. Cero configuración obligatoria: sin variable de
+# activación y sin issue_key. El job select (sin LLM) elige por Rank hasta
+# max_issues stories Listo/Ready + agent-ready + solo engine-openai, con los
+# blockers en Finalizada/Done. Si no hay ninguna, NO_WORK y el run acaba en
+# verde. Con issue_key solo entra esa story. El repo sale de GITHUB_REPOSITORY
+# cuando la story no declara otro. Human Review es el estado final por defecto.
+#
+# Modelos por defecto: orquestador y reviewer gpt-6-astra; builder gpt-6.1-sol.
+# Ids verificados en developers.openai.com/api/docs/models/gpt-6-astra y
+# developers.openai.com/api/docs/models/gpt-6.1-sol. El orquestador sale de
+# CODEX_ORCHESTRATOR_MODEL y de .codex/config.toml. El reviewer usa
+# CODEX_REVIEWER_MODEL en `codex exec --model`. El builder tiene que coincidir
+# con .codex/agents/feature-builder.toml. El reasoning effort no se fija.
+# Astra pide Codex CLI >= 0.153.0; este workflow fija 0.166.0.
+#
+# CLI fijado a @openai/codex 0.166.0 (npm, última estable el 3 nov 2026; tag
+# GitHub rust-v0.166.0). Los perfiles de permisos piden 0.138.0 o más.
+# openai/codex-action@v1 es el major que documenta el README del action.
+# OPENAI_API_KEY no va en el env del job: entra por openai-api-key y, en el
+# reviewer, solo como CODEX_API_KEY de ese paso.
+on:
+  workflow_dispatch:
+    inputs:
+      issue_key:
+        description: "Opcional: clave Jira exacta (p. ej. KAN-9). Vacío = selección automática por Rank"
+        type: string
+        required: false
+        default: ""
+      mode:
+        description: "inspect no llama al modelo; build construye y revisa cada story"
+        type: choice
+        required: true
+        default: inspect
+        options:
+          - inspect
+          - build
+      max_issues:
+        description: "Stories por run si issue_key está vacío (1-3). El piloto arranca en 1"
+        type: choice
+        required: false
+        default: "1"
+        options:
+          - "1"
+          - "2"
+          - "3"
+
+concurrency:
+  group: codex-factory-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CODEX_VERSION: "0.166.0"
+  CODEX_ORCHESTRATOR_MODEL: gpt-6-astra
+  CODEX_BUILDER_MODEL: gpt-6.1-sol
+  CODEX_REVIEWER_MODEL: gpt-6-astra
+  JIRA_URL: ${{ vars.JIRA_URL }}
+  JIRA_PROJECT_KEY: ${{ vars.JIRA_PROJECT_KEY || 'KAN' }}
+  JIRA_PROJECTS_FILTER: ${{ vars.JIRA_PROJECT_KEY || 'KAN' }}
+  JIRA_REPOSITORY_FIELD_ID: ${{ vars.JIRA_REPOSITORY_FIELD_ID }}
+  JIRA_DEPENDENCIES_FIELD_ID: ${{ vars.JIRA_DEPENDENCIES_FIELD_ID }}
+  JIRA_HUMAN_REVIEW_STATUS: ${{ vars.JIRA_HUMAN_REVIEW_STATUS || 'Human Review' }}
+  JIRA_USERNAME: ${{ secrets.JIRA_USERNAME }}
+  JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  select:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      issues: ${{ steps.gate.outputs.issues }}
+      has_work: ${{ steps.gate.outputs.has_work }}
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Configure GitHub CLI (read only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh auth status >/dev/null
+
+      - name: Install pinned Codex CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global "@openai/codex@${CODEX_VERSION}"
+          codex --version
+          python --version
+
+      - name: Verify Codex profile, models and pin (ZERO LLM tokens)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python automation/codex/check_config.py --require-secrets --require-cli
+
+      - name: Select eligible stories (ZERO LLM tokens)
+        id: gate
+        shell: bash
+        env:
+          MODE: ${{ github.event.inputs.mode }}
+          ISSUE_KEY: ${{ github.event.inputs.issue_key }}
+          MAX_ISSUES: ${{ github.event.inputs.max_issues }}
+        run: |
+          set -euo pipefail
+          python automation/codex/jira_gate.py \
+            --issue "$ISSUE_KEY" --mode "$MODE" --max-issues "${MAX_ISSUES:-1}"
+
+  factory:
+    needs: select
+    if: ${{ needs.select.outputs.has_work == 'true' && github.event.inputs.mode == 'build' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        issue: ${{ fromJson(needs.select.outputs.issues || '[]') }}
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      CODEX_SUMMARY_PATH: ${{ runner.temp }}/codex-factory-summary.json
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Configure GitHub CLI and git
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh auth status >/dev/null
+          gh auth setup-git
+
+      - name: Install uv for Jira MCP
+        uses: astral-sh/setup-uv@v10.3.0
+
+      - name: Install pinned Codex CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global "@openai/codex@${CODEX_VERSION}"
+          codex --version
+          python --version
+
+      - name: Verify Codex profile, models and pin (ZERO LLM tokens)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python automation/codex/check_config.py --require-secrets --require-cli
+          uvx mcp-atlassian --help >/dev/null
+
+      - name: Verify Jira issue, dependencies and routing (ZERO LLM tokens)
+        id: gate
+        shell: bash
+        env:
+          MODE: ${{ github.event.inputs.mode }}
+          ISSUE_KEY: ${{ matrix.issue }}
+        run: |
+          set -euo pipefail
+          python automation/codex/jira_gate.py --issue "$ISSUE_KEY" --mode "$MODE"
+
+      - name: Prepare feature branch from origin/master (NO LLM)
+        id: branch
+        if: ${{ steps.gate.outputs.has_work == 'true' }}
+        shell: bash
+        env:
+          BRANCH: ${{ steps.gate.outputs.branch }}
+        run: |
+          set -euo pipefail
+          DEFAULT_BRANCH="master"
+          if ! git ls-remote --exit-code --heads origin master >/dev/null; then
+            echo 'CONFIG_BLOCKED: origin/master not found; factory base branch must be master'
+            exit 2
+          fi
+          git fetch origin "$DEFAULT_BRANCH"
+          BASE_SHA="$(git rev-parse "origin/$DEFAULT_BRANCH")"
+          git switch -c "$BRANCH" "$BASE_SHA"
+          gh auth setup-git
+          git config user.name 'agentic-factory[bot]'
+          git config user.email 'agentic-factory@users.noreply.github.com'
+          mkdir -p .review
+          EXCLUDE="$(git rev-parse --git-path info/exclude)"
+          printf '%s\n' '.review/' 'automation/codex/.runtime-orchestrator-prompt.md' 'automation/codex/.runtime-reviewer-prompt.md' >> "$EXCLUDE"
+          echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+          echo "Prepared $BRANCH from freshly fetched origin/$DEFAULT_BRANCH ($BASE_SHA)"
+
+      - name: Prepare trusted codex-home
+        if: ${{ steps.gate.outputs.has_work == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python automation/codex/prepare_codex_home.py \
+            --config .codex/config.toml \
+            --agents .codex/agents \
+            --dest "$RUNNER_TEMP/codex-home" \
+            --workspace "$GITHUB_WORKSPACE"
+
+      - name: Render orchestrator prompt
+        if: ${{ steps.gate.outputs.has_work == 'true' }}
+        shell: bash
+        env:
+          ISSUE_KEY: ${{ steps.gate.outputs.issue }}
+          BRANCH: ${{ steps.gate.outputs.branch }}
+          BASE_SHA: ${{ steps.branch.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          python automation/codex/render_prompt.py \
+            --template automation/codex/orchestrator-prompt.md \
+            --out automation/codex/.runtime-orchestrator-prompt.md \
+            --issue "$ISSUE_KEY" \
+            --repo "$GITHUB_REPOSITORY" \
+            --base "$BASE_SHA" \
+            --branch "$BRANCH"
+
+      # drop-sudo is irreversible in this job. Do not invoke the action again
+      # afterwards; the reviewer below calls the already installed CLI.
+      - name: Orchestrator and feature-builder
+        id: build
+        if: ${{ steps.gate.outputs.has_work == 'true' }}
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-version: ${{ env.CODEX_VERSION }}
+          safety-strategy: drop-sudo
+          permission-profile: factory-build
+          codex-home: ${{ runner.temp }}/codex-home
+          model: ${{ env.CODEX_ORCHESTRATOR_MODEL }}
+          prompt-file: automation/codex/.runtime-orchestrator-prompt.md
+          output-file: .review/orchestrator-last.txt
+
+      - name: Save working-tree diff as artifact (NO push, never fails)
+        id: diff
+        if: always()
+        continue-on-error: true
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.branch.outputs.base_sha }}
+        run: |
+          set +e
+          OUT_DIR="$RUNNER_TEMP/codex-factory-diff"
+          mkdir -p "$OUT_DIR"
+          if [ -z "${BASE_SHA:-}" ]; then
+            echo "No BASE_SHA (no build branch prepared); no diff to save"
+            exit 0
+          fi
+          TMP_INDEX="$RUNNER_TEMP/codex-factory-diff.index"
+          cp "$(git rev-parse --git-path index)" "$TMP_INDEX" 2>/dev/null || true
+          export GIT_INDEX_FILE="$TMP_INDEX"
+          git add -A
+          git diff --cached --binary "$BASE_SHA" > "$OUT_DIR/codex-factory.patch"
+          if [ -s "$OUT_DIR/codex-factory.patch" ]; then
+            echo "Saved diff vs $BASE_SHA: $(wc -l < "$OUT_DIR/codex-factory.patch") lines"
+          else
+            rm -f "$OUT_DIR/codex-factory.patch"
+            echo "No changes vs $BASE_SHA; no patch written"
+          fi
+          rm -f "$TMP_INDEX"
+          exit 0
+
+      - name: Upload diff artifact (if any)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-factory-diff-${{ matrix.issue }}
+          path: ${{ runner.temp }}/codex-factory-diff/*.patch
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Prepare read-only review input
+        id: review_input
+        if: ${{ steps.gate.outputs.has_work == 'true' }}
+        shell: bash
+        env:
+          ISSUE_KEY: ${{ steps.gate.outputs.issue }}
+        run: |
+          set -euo pipefail
+          python automation/codex/prepare_review.py --issue "$ISSUE_KEY" --repo "$GITHUB_REPOSITORY" \
+            | tee "$RUNNER_TEMP/codex-review-input.json"
+
+      - name: Render reviewer prompt
+        if: ${{ steps.gate.outputs.has_work == 'true' }}
+        shell: bash
+        env:
+          ISSUE_KEY: ${{ steps.gate.outputs.issue }}
+          BRANCH: ${{ steps.gate.outputs.branch }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          data = json.loads(Path(os.environ["RUNNER_TEMP"], "codex-review-input.json").read_text())
+          Path(os.environ["RUNNER_TEMP"], "review-fields.env").write_text(
+              f"HEAD={data['head']}\nPR={data['pr']}\n", encoding="utf-8")
+          PY
+          set -a
+          # shellcheck disable=SC1091
+          source "$RUNNER_TEMP/review-fields.env"
+          set +a
+          python automation/codex/render_prompt.py \
+            --template automation/codex/reviewer-prompt.md \
+            --out automation/codex/.runtime-reviewer-prompt.md \
+            --issue "$ISSUE_KEY" \
+            --repo "$GITHUB_REPOSITORY" \
+            --branch "$BRANCH" \
+            --pr-url "$PR" \
+            --head "$HEAD"
+
+      - name: Read-only reviewer
+        if: ${{ steps.gate.outputs.has_work == 'true' }}
+        shell: bash
+        env:
+          CODEX_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CODEX_HOME: ${{ runner.temp }}/codex-reviewer-home
+        run: |
+          set -euo pipefail
+          unset OPENAI_API_KEY || true
+          mkdir -p "$CODEX_HOME"
+          command -v codex
+          OUT="$RUNNER_TEMP/codex-review-last.txt"
+          codex exec \
+            --ignore-user-config \
+            --sandbox read-only \
+            --ask-for-approval never \
+            --ephemeral \
+            --model "$CODEX_REVIEWER_MODEL" \
+            --output-schema automation/codex/review-schema.json \
+            --output-last-message "$OUT" \
+            - < automation/codex/.runtime-reviewer-prompt.md
+
+      - name: Publish review marker and move Jira
+        if: ${{ steps.gate.outputs.has_work == 'true' }}
+        shell: bash
+        env:
+          ISSUE_KEY: ${{ steps.gate.outputs.issue }}
+        run: |
+          set -euo pipefail
+          python automation/codex/publish_review.py \
+            --issue "$ISSUE_KEY" \
+            --verdict "$RUNNER_TEMP/codex-review-last.txt"
+
+      - name: Postflight touched files, secrets, Draft PR and Jira
+        if: ${{ steps.gate.outputs.has_work == 'true' }}
+        shell: bash
+        env:
+          ISSUE_KEY: ${{ steps.gate.outputs.issue }}
+        run: |
+          set -euo pipefail
+          python automation/codex/postflight.py --issue "$ISSUE_KEY"
+
+      - name: Upload sanitized execution summary
+        if: ${{ always() && needs.select.outputs.has_work == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-factory-summary-${{ matrix.issue }}
+          path: ${{ runner.temp }}/codex-factory-summary.json
+          if-no-files-found: ignore
+          retention-days: 7

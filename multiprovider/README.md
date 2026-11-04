@@ -30,7 +30,7 @@ Cursor docs prioritize `.cursor/agents` over equivalent `.claude/agents` files, 
 
 ## Install / activate in order
 
-1. **Jira router first.** Keep EXACTLY one label per Ready issue: `engine-claude`, `engine-cursor`, or `engine-opencode`, plus `agent-ready`, exact Repository and full approved spec. Every blocking dependency must be `Done`. See `jira/ROUTING.md`.
+1. **Jira router first.** Keep EXACTLY one label per Ready issue: `engine-claude`, `engine-cursor`, `engine-opencode`, or `engine-openai`, plus `agent-ready`, exact Repository and full approved spec. Every blocking dependency must be `Done`. See `jira/ROUTING.md`.
 2. **Protect Claude.** Ensure Claude Ready issues carry `engine-claude` and that your existing Claude Routine uses `claude/01-jira-three-parallel-STRICT-ROUTING.md`. Do not change proven Claude feature-builder/pr-reviewer files.
 3. **Commit only the two Cursor agent files** from `cursor/.cursor/agents/` into your product repo's `.cursor/agents/` and push. Leave `AGENTS.md` as-is.
 4. **Cursor account entitlement:** verify that your Cursor plan actually enables Cloud Agents and Automations. Current docs put these capabilities on Premium and above; Cursor Plus does not provide them. Do not assume Grokbot access implies an Automation subscription. Billing is based on cloud agent usage.
@@ -46,6 +46,7 @@ Cursor docs prioritize `.cursor/agents` over equivalent `.claude/agents` files, 
 - `contracts/PORTABLE-CONTRACT.md`: source-neutral policy; now supplemented for Cursor's single-automation review cycle.
 - `jira/ROUTING.md`: Jira tagging convention and query templates (unchanged).
 - `opencode/`: OpenCode Go CLI/GitHub Actions setup. `opencode-factory.yml` selects up to 3 `engine-opencode` stories per run and executes them in parallel, daily at 00:00 Europe/Madrid in winter (`cron: '0 23 * * *'`; summer/CEST would be `'0 22 * * *'`).
+- `codex/`: Codex (OpenAI) pilot on GitHub Actions. Manual `workflow_dispatch` only (no cron). `codex-factory.yml` selects up to 3 `engine-openai` stories (default 1) without an LLM, then each matrix job runs an orchestrator (`gpt-6-astra`) plus `feature-builder` (`gpt-6.1-sol`) through `openai/codex-action` (`safety-strategy: drop-sudo`) and a second read-only `codex exec` reviewer (`gpt-6-astra`). Marker: `Factory Engine: openai`. See the root README install section.
 
 ## Explicit limitations, not hidden functionality
 

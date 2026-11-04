@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdict", "jira_key", "head_sha", "summary"],
+  "properties": {
+    "verdict": {
+      "type": "string",
+      "enum": ["PASS", "CHANGES_REQUESTED", "BLOCKED"]
+    },
+    "jira_key": { "type": "string" },
+    "head_sha": { "type": "string" },
+    "summary": { "type": "string" }
+  }
+}

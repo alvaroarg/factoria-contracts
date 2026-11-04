@@ -8,7 +8,7 @@
 
 | # | Iniciativa | Impacto | Encaje | Esfuerzo | Prioridad | Estado |
 |---|---|---|---|---|---|---|
-| 1 | OpenAI como proveedor | por decidir | por decidir | por decidir | por decidir | Propuesto |
+| 1 | OpenAI como proveedor | por decidir | por decidir | por decidir | por decidir | Piloto en contratos |
 | 2 | Factoría multirrepo (Jira como fuente única) | por decidir | por decidir | por decidir | por decidir | Propuesto (dirección elegida) |
 | 3 | Propagación automática de contratos por PR | por decidir | por decidir | por decidir | por decidir | Propuesto |
 
@@ -18,28 +18,25 @@
 
 **Objetivo.** Tener un cuarto proveedor junto a Claude, Cursor y OpenCode, con las mismas reglas comunes y el mismo [contrato portable](multiprovider/contracts/PORTABLE-CONTRACT.md). Así hay más capacidad y menos dependencia de un solo vendor, y se pueden comparar coste y calidad por story.
 
-**Alcance inicial**
-- Una carpeta `multiprovider/<openai>/` con el contrato del orquestador y los agentes builder y reviewer, sin perder la regla de reviewer independiente y en solo lectura.
-- Una etiqueta de routing nueva y el valor correspondiente en `Factory Engine:`.
-- Instrucciones de instalación en el README, siguiendo el mismo formato que los demás providers.
+**Estado: piloto en contratos.** El diseño que está en el repo es Codex en GitHub Actions, solo con `workflow_dispatch` (sin cron) y sin activar ningún repo de producto. Las puntuaciones de la tabla siguen sin decidir.
 
-**Piezas del repo afectadas**
-- `multiprovider/jira/ROUTING.md`: lista de etiquetas `engine-*` y JQL por provider.
-- `multiprovider/contracts/PORTABLE-CONTRACT.md`: la lista de etiquetas válidas (`engine-claude`, `engine-cursor`, `engine-opencode`) y `Factory Engine: <claude|cursor|opencode>`.
-- `multiprovider/opencode/automation/opencode/jira_gate.py`: la regla de una sola etiqueta engine se basa en una lista fija de tres etiquetas. Habría que ampliarla para que una story con dos etiquetas engine siga saltándose. También sus tests en `multiprovider/opencode/tests/`.
-- Los contratos de Claude (`multiprovider/claude/…STRICT-ROUTING.md`) y Cursor (`multiprovider/cursor/01-scheduled-implement.md`), que también nombran las tres etiquetas.
-- `README.md`: tabla de providers e instalación.
+**Qué hay**
+- Carpeta `multiprovider/codex/`: contrato del orquestador, `feature-builder`, prompt del reviewer en solo lectura, perfil `.codex/config.toml` (`approval_policy = "never"`, perfil `factory-build` que extiende `:workspace` con `.git` escribible y allowlist de red, MCP `uvx mcp-atlassian` con tools mínimas) y workflow `.github/workflows/codex-factory.yml`.
+- Etiqueta `engine-openai` y marcador `Factory Engine: openai`. La lista de etiquetas que valida cada engine incluye las cuatro (`engine-claude`, `engine-cursor`, `engine-opencode`, `engine-openai`) en los dos `jira_gate.py` y en los contratos de Claude, Cursor y OpenCode. Una story con dos etiquetas `engine-*` sigue bloqueada.
+- El job `select` no llama al modelo: elige por Rank, con Listo/Ready, Finalizada/Done y Human Review por defecto, y usa el repo del workflow si la story no declara otro. Con `issue_key` solo entra esa story. El piloto pide 1 story por defecto y admite hasta 3 (`max-parallel: 3`, `fail-fast: false`). La rama es `codex/<key>` desde `origin/master`.
+- Cada story construye con `openai/codex-action@v1` (`safety-strategy: drop-sudo`, CLI `0.166.0`) y después pasa un `codex exec --sandbox read-only` como reviewer. Un subagente no sirve para ese aislamiento: hereda el sandbox del padre. No hay corrección automática en el piloto.
+- Modelos por defecto: orquestador y reviewer `gpt-6-astra`; builder `gpt-6.1-sol`. Los dos ids están en la documentación de la API. `check_config.py` no sustituye un modelo por otro.
+- Instalación (secretos, permiso de Actions para crear PRs, `inspect` y luego `build`): sección Codex del README.
 
-**Dependencias y riesgos**
-- Si un provider no reconoce la etiqueta nueva, podría tratar como válida una story que tenga dos etiquetas engine. Hay que actualizar los tres a la vez.
-- No sé si el runtime elegido permite subagentes aislados y un reviewer de verdad independiente. Si no lo permite, el contrato obliga a declararlo como hueco.
-- Habrá secretos y costes nuevos por run.
+**Qué falta verificar en un run real**
+- Si el MCP stdio (`uvx mcp-atlassian`) tiene red dentro del perfil `factory-build` o se queda sin salida aunque `network.enabled = true`. Es lo primero que hay que mirar en el `build`: si no arranca, el run falla porque el servidor es `required`.
+- Si `.git = "write"` permite el commit en el runner hospedado con el CLI `0.166.0`.
+- El consumo real de tokens y si el tier de la cuenta aguanta hasta 3 jobs a la vez.
+- Que el action fusione el proxy en `config.toml` sin pisar el perfil.
 
 **Preguntas abiertas para Álvaro**
-1. ¿Qué runtime usamos: Codex (CLI o cloud), la Agents API/SDK u OpenAI como modelo dentro de OpenCode? Si es lo último, ¿hablamos de un proveedor nuevo o de un modelo más de OpenCode?
-2. ¿Dónde se ejecuta: en GitHub Actions, como OpenCode, o en una plataforma gestionada?
-3. ¿Qué nombre llevan la etiqueta y el marcador (`engine-openai` / `Factory Engine: openai`)?
-4. ¿Cuántas stories por run y qué modelos usan el builder y el reviewer?
+1. Si el piloto se queda, ¿a qué hora va el cron para no solaparse con OpenCode?
+2. ¿Qué story se usa en el primer `mode=build`?
 
 ---
 

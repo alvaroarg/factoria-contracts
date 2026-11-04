@@ -1,0 +1,89 @@
+# Perfil del piloto Codex (GitHub Actions).
+# Los nombres de las claves están tomados de la documentación publicada:
+# - approval_policy: https://developers.openai.com/codex/config-reference
+#   y https://developers.openai.com/codex/agent-approvals-security
+# - perfiles de permisos (extends, filesystem, network.domains, features.network_proxy):
+#   https://developers.openai.com/codex/permissions
+# - MCP (command, args, env, env_vars, required, enabled_tools, startup_timeout_sec,
+#   default_tools_approval_mode): https://developers.openai.com/codex/mcp
+# - subagentes (agents.max_concurrent_threads_per_session):
+#   https://developers.openai.com/codex/subagents
+#
+# Un perfil NO se combina con sandbox_mode ni con [sandbox_workspace_write].
+# factory-build extiende el perfil integrado :workspace (el equivalente actual
+# de workspace-write). Ese perfil deja .git en solo lectura; la regla más
+# específica ".git" = "write" es el override que documenta Permissions.
+# Las reglas de dominios solo se aplican si features.network_proxy = true.
+#
+# No declarar aquí el proveedor del proxy: openai/codex-action lo escribe al
+# arrancar y un segundo valor duplica la clave TOML.
+# Este piloto no abre el sandbox ni desactiva el aislamiento del runner.
+#
+# Modelo del orquestador. Id verificado: `gpt-6-astra`
+# (https://developers.openai.com/api/docs/models/gpt-6-astra).
+# El builder sigue en gpt-6.1-sol (.codex/agents/feature-builder.toml).
+# El reviewer usa el mismo id que este modelo, vía CODEX_REVIEWER_MODEL.
+# CODEX_ORCHESTRATOR_MODEL tiene que coincidir con este valor.
+
+model = "gpt-6-astra"
+approval_policy = "never"
+web_search = "disabled"
+default_permissions = "factory-build"
+
+[features]
+network_proxy = true
+
+[agents]
+max_concurrent_threads_per_session = 1
+
+[permissions.factory-build]
+description = "Workspace write, .git writable, network allowlist. No approval prompts."
+extends = ":workspace"
+
+[permissions.factory-build.filesystem.":workspace_roots"]
+".git" = "write"
+
+[permissions.factory-build.network]
+enabled = true
+
+[permissions.factory-build.network.domains]
+"github.com" = "allow"
+"api.github.com" = "allow"
+"**.github.com" = "allow"
+"**.githubusercontent.com" = "allow"
+"**.atlassian.net" = "allow"
+"api.atlassian.com" = "allow"
+"pypi.org" = "allow"
+"files.pythonhosted.org" = "allow"
+"pypi.python.org" = "allow"
+"api.openai.com" = "allow"
+
+[permissions.factory-review]
+description = "Documented read-only profile. The pilot reviewer does not select it; the workflow runs a separate codex exec --sandbox read-only."
+extends = ":read-only"
+
+[permissions.factory-review.filesystem.":workspace_roots"]
+"." = "read"
+
+[permissions.factory-review.network]
+enabled = false
+
+[mcp_servers.jira]
+command = "uvx"
+args = ["mcp-atlassian"]
+required = true
+startup_timeout_sec = 120
+default_tools_approval_mode = "auto"
+enabled_tools = [
+  "jira_search",
+  "jira_get_issue",
+  "jira_get_transitions",
+  "jira_transition_issue",
+  "jira_add_comment",
+]
+env_vars = ["JIRA_URL", "JIRA_USERNAME", "JIRA_API_TOKEN", "JIRA_PROJECTS_FILTER"]
+
+[mcp_servers.jira.env]
+ENABLED_TOOLS = "jira_search,jira_get_issue,jira_get_transitions,jira_transition_issue,jira_add_comment"
+READ_ONLY_MODE = "false"
+TOOLSETS = "default"

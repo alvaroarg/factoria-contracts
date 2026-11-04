@@ -66,6 +66,14 @@ class JiraGateTests(unittest.TestCase):
         with self.assertRaisesRegex(mod.GateError,'exactly one'):
             mod.validate('KAN-9','inspect',lambda k:issue(k,labels=['agent-ready','engine-claude','engine-opencode']),False)
 
+    def test_engine_openai_does_not_count_as_opencode(self):
+        with self.assertRaisesRegex(mod.GateError,'exactly one'):
+            mod.validate('KAN-9','inspect',lambda k:issue(k,labels=['agent-ready','engine-openai']),False)
+        with self.assertRaisesRegex(mod.GateError,'exactly one'):
+            mod.validate('KAN-9','inspect',lambda k:issue(k,labels=['agent-ready','engine-opencode','engine-openai']),False)
+        self.assertIn('engine-openai', mod.ENGINE_LABELS)
+        self.assertEqual(mod.REQUIRED_ENGINE, 'engine-opencode')
+
     def test_repo_mismatch(self):
         with self.assertRaisesRegex(mod.GateError,'Repository'):
             mod.validate('KAN-9','inspect',lambda k:issue(k,description='Repository: other/foreign\nDetailed approved specification and acceptance tests.'),False)

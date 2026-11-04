@@ -8,9 +8,11 @@ Zero configuration, like the previous pilot (Licitaciones PR #16 / contracts
 PR #5): with ``--issue`` it checks exactly that key and no other. With an
 empty ``--issue`` it selects deterministically (REST/JQL, no LLM) up to
 ``--max-issues`` eligible issues (1–3, default 3) by Jira ``Rank ASC``
-(Ready/Listo + agent-ready + ONLY engine-opencode, every blocker
-Done/Finalizada, no existing ``agent/<key>`` branch/PR). No eligible issue
-=> ``NO_WORK`` and exit 0 without any LLM call.
+(Ready/Listo + agent-ready + ONLY engine-opencode among ENGINE_LABELS,
+every blocker Done/Finalizada, no existing ``agent/<key>`` branch/PR).
+``engine-openai`` is one of those labels, so a story that also carries it
+is ineligible here. No eligible issue => ``NO_WORK`` and exit 0 without
+any LLM call.
 """
 import argparse
 import base64
@@ -57,6 +59,12 @@ STATUS_EQUIVALENTS = {
     "done": ("Done", "Finalizada"),
 }
 DEFAULT_HUMAN_REVIEW_STATUS = "Human Review"
+# Every engine label the factory knows. This gate still requires exactly
+# engine-opencode; the other names exist so a second engine-* label
+# (including engine-openai) stays ineligible instead of being ignored.
+ENGINE_LABELS = ("engine-claude", "engine-cursor", "engine-opencode", "engine-openai")
+REQUIRED_ENGINE = "engine-opencode"
+BRANCH_PREFIX = "agent"
 
 
 def accepted_statuses(env_name, kind):
@@ -271,9 +279,9 @@ def validate(key, mode, get_issue, check_github=True):
     labels = fields.get("labels")
     if not isinstance(labels, list):
         raise GateError("Cannot inspect Jira labels")
-    engines = [l for l in labels if l in ("engine-claude", "engine-cursor", "engine-opencode")]
-    if engines != ["engine-opencode"] or "agent-ready" not in labels:
-        raise GateError("Issue must have agent-ready and exactly one engine-opencode label")
+    engines = [label for label in labels if label in ENGINE_LABELS]
+    if engines != [REQUIRED_ENGINE] or "agent-ready" not in labels:
+        raise GateError(f"Issue must have agent-ready and exactly one {REQUIRED_ENGINE} label")
     description = flatten_adf(fields.get("description"))
     repo_field = os.environ.get("JIRA_REPOSITORY_FIELD_ID", "").strip()
     declared = []
@@ -305,7 +313,7 @@ def validate(key, mode, get_issue, check_github=True):
         status = str(((dep.get("fields") or {}).get("status") or {}).get("name") or "").strip()
         if not status_is(status, "done"):
             raise GateError(f"Blocker {dependency} is {status!r}, not exact {done_label!r}")
-    branch = "agent/" + key.lower()
+    branch = BRANCH_PREFIX + "/" + key.lower()
     if check_github:
         github_existing(key, branch)
     return {"issue": key, "repo": repo, "repo_source": repo_source, "status": actual_status, "blockers": sorted(blockers),
@@ -325,7 +333,7 @@ def project_key(issue_key=""):
 def candidate_jql(project):
     # Status is NOT put in the JQL (an unknown status name makes Jira reject the
     # whole query); Ready/Listo is checked per issue on the full detail.
-    return (f'project = "{project}" AND labels = "agent-ready" AND labels = "engine-opencode" '
+    return (f'project = "{project}" AND labels = "agent-ready" AND labels = "{REQUIRED_ENGINE}" '
             'AND statusCategory != Done ORDER BY Rank ASC')
 
 
