@@ -7,10 +7,13 @@ name: Codex Factory - pilot
 # verde. Con issue_key solo entra esa story. El repo sale de GITHUB_REPOSITORY
 # cuando la story no declara otro. Human Review es el estado final por defecto.
 #
-# Modelo por defecto gpt-6.1-sol (id verificado en la documentación de OpenAI).
-# La elección definitiva es posterior. Orquestador y reviewer salen de estas
-# variables; el builder tiene que coincidir con .codex/agents/feature-builder.toml.
-# El reasoning effort no se fija.
+# Modelos por defecto: orquestador y reviewer gpt-6-astra; builder gpt-6.1-sol.
+# Ids verificados en developers.openai.com/api/docs/models/gpt-6-astra y
+# developers.openai.com/api/docs/models/gpt-6.1-sol. El orquestador sale de
+# CODEX_ORCHESTRATOR_MODEL y de .codex/config.toml. El reviewer usa
+# CODEX_REVIEWER_MODEL en `codex exec --model`. El builder tiene que coincidir
+# con .codex/agents/feature-builder.toml. El reasoning effort no se fija.
+# Astra pide Codex CLI >= 0.153.0; este workflow fija 0.166.0.
 #
 # CLI fijado a @openai/codex 0.166.0 (npm, última estable el 3 nov 2026; tag
 # GitHub rust-v0.166.0). Los perfiles de permisos piden 0.138.0 o más.
@@ -52,9 +55,9 @@ permissions:
 
 env:
   CODEX_VERSION: "0.166.0"
-  CODEX_ORCHESTRATOR_MODEL: gpt-6.1-sol
+  CODEX_ORCHESTRATOR_MODEL: gpt-6-astra
   CODEX_BUILDER_MODEL: gpt-6.1-sol
-  CODEX_REVIEWER_MODEL: gpt-6.1-sol
+  CODEX_REVIEWER_MODEL: gpt-6-astra
   JIRA_URL: ${{ vars.JIRA_URL }}
   JIRA_PROJECT_KEY: ${{ vars.JIRA_PROJECT_KEY || 'KAN' }}
   JIRA_PROJECTS_FILTER: ${{ vars.JIRA_PROJECT_KEY || 'KAN' }}

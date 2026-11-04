@@ -2,8 +2,10 @@
 # orquestador: un fichero de agente no puede poner otro sandbox (documentado en
 # https://developers.openai.com/codex/subagents ). El reviewer de solo lectura
 # NO es este agente; es otra invocación de `codex exec --sandbox read-only`.
-# Modelo por defecto del piloto, el mismo id verificado que el orquestador.
-# La elección definitiva es posterior. CODEX_BUILDER_MODEL tiene que coincidir.
+# Modelo del builder. Id verificado: `gpt-6.1-sol`
+# (https://developers.openai.com/api/docs/models/gpt-6.1-sol).
+# Orquestador y reviewer usan `gpt-6-astra`. CODEX_BUILDER_MODEL tiene que
+# coincidir con este valor.
 
 name = "feature-builder"
 description = "Implements exactly one approved Jira issue on the branch the orchestrator already prepared. Does not commit, push, open PRs, or edit Jira."

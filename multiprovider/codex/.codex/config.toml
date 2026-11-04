@@ -19,14 +19,13 @@
 # arrancar y un segundo valor duplica la clave TOML.
 # Este piloto no abre el sandbox ni desactiva el aislamiento del runner.
 #
-# Modelo por defecto del piloto. Verificado como id `gpt-6.1-sol` en
-# https://developers.openai.com/api/docs/models/gpt-6.1-sol y como modelo
-# recomendado de Codex para trabajo de ingeniería largo en
-# https://developers.openai.com/codex/cli/reference (ejemplo --model) y
-# https://learn.chatgpt.com/docs/models . La elección definitiva es posterior:
+# Modelo del orquestador. Id verificado: `gpt-6-astra`
+# (https://developers.openai.com/api/docs/models/gpt-6-astra).
+# El builder sigue en gpt-6.1-sol (.codex/agents/feature-builder.toml).
+# El reviewer usa el mismo id que este modelo, vía CODEX_REVIEWER_MODEL.
 # CODEX_ORCHESTRATOR_MODEL tiene que coincidir con este valor.
 
-model = "gpt-6.1-sol"
+model = "gpt-6-astra"
 approval_policy = "never"
 web_search = "disabled"
 default_permissions = "factory-build"

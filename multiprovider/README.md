@@ -46,7 +46,7 @@ Cursor docs prioritize `.cursor/agents` over equivalent `.claude/agents` files, 
 - `contracts/PORTABLE-CONTRACT.md`: source-neutral policy; now supplemented for Cursor's single-automation review cycle.
 - `jira/ROUTING.md`: Jira tagging convention and query templates (unchanged).
 - `opencode/`: OpenCode Go CLI/GitHub Actions setup. `opencode-factory.yml` selects up to 3 `engine-opencode` stories per run and executes them in parallel, daily at 00:00 Europe/Madrid in winter (`cron: '0 23 * * *'`; summer/CEST would be `'0 22 * * *'`).
-- `codex/`: Codex (OpenAI) pilot on GitHub Actions. Manual `workflow_dispatch` only (no cron). `codex-factory.yml` selects up to 3 `engine-openai` stories (default 1) without an LLM, then each matrix job runs an orchestrator plus `feature-builder` through `openai/codex-action` (`safety-strategy: drop-sudo`) and a second read-only `codex exec` reviewer. Marker: `Factory Engine: openai`. See the root README install section.
+- `codex/`: Codex (OpenAI) pilot on GitHub Actions. Manual `workflow_dispatch` only (no cron). `codex-factory.yml` selects up to 3 `engine-openai` stories (default 1) without an LLM, then each matrix job runs an orchestrator (`gpt-6-astra`) plus `feature-builder` (`gpt-6.1-sol`) through `openai/codex-action` (`safety-strategy: drop-sudo`) and a second read-only `codex exec` reviewer (`gpt-6-astra`). Marker: `Factory Engine: openai`. See the root README install section.
 
 ## Explicit limitations, not hidden functionality
 

@@ -25,7 +25,7 @@
 - Etiqueta `engine-openai` y marcador `Factory Engine: openai`. La lista de etiquetas que valida cada engine incluye las cuatro (`engine-claude`, `engine-cursor`, `engine-opencode`, `engine-openai`) en los dos `jira_gate.py` y en los contratos de Claude, Cursor y OpenCode. Una story con dos etiquetas `engine-*` sigue bloqueada.
 - El job `select` no llama al modelo: elige por Rank, con Listo/Ready, Finalizada/Done y Human Review por defecto, y usa el repo del workflow si la story no declara otro. Con `issue_key` solo entra esa story. El piloto pide 1 story por defecto y admite hasta 3 (`max-parallel: 3`, `fail-fast: false`). La rama es `codex/<key>` desde `origin/master`.
 - Cada story construye con `openai/codex-action@v1` (`safety-strategy: drop-sudo`, CLI `0.166.0`) y después pasa un `codex exec --sandbox read-only` como reviewer. Un subagente no sirve para ese aislamiento: hereda el sandbox del padre. No hay corrección automática en el piloto.
-- Modelos por defecto, provisionales: orquestador, builder y reviewer `gpt-6.1-sol`. El id está documentado; la elección definitiva es posterior y `check_config.py` no sustituye un modelo por otro.
+- Modelos por defecto: orquestador y reviewer `gpt-6-astra`; builder `gpt-6.1-sol`. Los dos ids están en la documentación de la API. `check_config.py` no sustituye un modelo por otro.
 - Instalación (secretos, permiso de Actions para crear PRs, `inspect` y luego `build`): sección Codex del README.
 
 **Qué falta verificar en un run real**
@@ -35,9 +35,8 @@
 - Que el action fusione el proxy en `config.toml` sin pisar el perfil.
 
 **Preguntas abiertas para Álvaro**
-1. ¿Se queda `gpt-6.1-sol` en los tres papeles?
-2. Si el piloto se queda, ¿a qué hora va el cron para no solaparse con OpenCode?
-3. ¿Qué story se usa en el primer `mode=build`?
+1. Si el piloto se queda, ¿a qué hora va el cron para no solaparse con OpenCode?
+2. ¿Qué story se usa en el primer `mode=build`?
 
 ---
 
