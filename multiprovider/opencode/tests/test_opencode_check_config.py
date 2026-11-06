@@ -46,6 +46,60 @@ class CheckConfigTests(unittest.TestCase):
         self.assertIn('jira', cfg['mcp'])
 
 
+class ChangesRequestedQuotaTests(unittest.TestCase):
+    """OpenCode CHANGES_REQUESTED caps: 3 corrections and 3 re-reviews (4 reviews total)."""
+
+    english = 'at most 3 correction cycles and at most 3 re-reviews after the initial review (4 reviews total)'
+    spanish = 'máximo 3 ciclos de corrección y máximo 3 re-revisiones después de la review inicial (4 reviews en total)'
+
+    def test_operative_contracts_share_one_quota(self):
+        files = {
+            '.opencode/agents/factory-orchestrator.md': self.english,
+            'automation/opencode/pilot-prompt.md': self.english,
+            '.github/workflows/opencode-factory-PILOT.yml': self.english,
+            'SETUP-AND-LIMITATIONS.md': self.english,
+            'V3-README.md': self.spanish,
+        }
+        readme = (ROOT.parents[1] / 'README.md').read_text(encoding='utf-8')
+        self.assertIn(self.spanish.casefold(), readme.casefold())
+        retired = (
+            'ONE NEW reviewer',
+            '**one** correction',
+            'policy is suspended',
+            '(max 3 rounds)',
+            'obtain one independent',
+            'máximo 1 corrección',
+            'Máximo 1, y solo si',
+        )
+        for rel, phrase in files.items():
+            text = (ROOT / rel).read_text(encoding='utf-8')
+            flat = ' '.join(text.split())
+            self.assertIn(phrase.casefold(), flat.casefold(), rel)
+            for old in retired:
+                self.assertNotIn(old, text, rel + ' still has ' + old)
+        for old in ('Máximo 1, y solo si', 'máximo 1 corrección', '(max 3 rounds)'):
+            self.assertNotIn(old, readme)
+
+    def test_other_opencode_caps_unchanged(self):
+        orch = (ROOT / '.opencode' / 'agents' / 'factory-orchestrator.md').read_text(encoding='utf-8')
+        prompt = (ROOT / 'automation' / 'opencode' / 'pilot-prompt.md').read_text(encoding='utf-8')
+        for text in (orch, prompt):
+            self.assertIn('origin/master', text)
+            self.assertIn('Ready', text)
+            self.assertIn('Listo', text)
+            self.assertIn('Done', text)
+            self.assertIn('Finalizada', text)
+        self.assertIn('40 agent steps', orch)
+        self.assertIn('reviewer 15', orch)
+        self.assertIn('20400 s', orch)
+        self.assertIn('900 s', orch)
+        self.assertIn('5M reported input tokens', orch)
+        self.assertIn('up to 3 jobs in parallel', orch)
+        self.assertIn('model: opencode-go/kimi-k3.1-pro', orch)
+        self.assertIn('DeepSeek V4.1 Flash', orch)
+        self.assertIn('Kimi K3.1 Pro', orch)
+
+
 class ModelListRetryTests(unittest.TestCase):
     required = ('opencode-go/deepseek-v4.1-flash', 'opencode-go/kimi-k3.1-pro')
 

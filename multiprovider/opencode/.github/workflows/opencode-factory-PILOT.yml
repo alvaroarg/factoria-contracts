@@ -106,12 +106,13 @@ jobs:
             a DRAFT PR with Factory Engine: opencode and
             Jira key in the description.
 
-            Then invoke a NEW pr-reviewer (Kimi K3.1 Pro) on
+            Then invoke a fresh pr-reviewer (Kimi K3.1 Pro) on
             the actual published GitHub PR diff, not only
             a local diff or the builder's summary. If
-            CHANGES_REQUESTED, ask the original builder
-            to correct the SAME branch/PR and re-review
-            (max 3 rounds). Never self-approve.
+            CHANGES_REQUESTED, resume the original builder
+            on the SAME branch/PR. Allow at most 3 correction
+            cycles and at most 3 re-reviews after the initial
+            review (4 reviews total). Never self-approve.
 
             Transition Jira to Human Review ONLY after
             reviewer PASS on latest PR HEAD and actual

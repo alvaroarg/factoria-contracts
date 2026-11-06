@@ -14,6 +14,8 @@ La última ejecución de OpenCode agotó una ventana de cuota sin una sola edici
 
 IDs exactos: `opencode-go/kimi-k3.1-pro` y `opencode-go/deepseek-v4.1-flash`.
 
+> **Cambio (06/11/2026):** tras `CHANGES_REQUESTED`, el cupo por story es máximo 3 ciclos de corrección y máximo 3 re-revisiones después de la review inicial (4 reviews en total). Sigue haciendo falta retomar el mismo builder y la misma rama. No cambian el paralelismo (hasta 3 stories), los modelos ni los topes de tiempo y tokens.
+
 > **Cambio (28/10/2026):** el workflow v3 selecciona **hasta 3** stories por Rank (`max_issues` 1–3, por defecto 3) en un job `select` sin LLM y las ejecuta en paralelo en el job `factory` (matriz, `fail-fast: false`). Con `issue_key` solo esa. Si no hay ninguna, `NO_WORK` en verde. El CLI queda fijado en `OPENCODE_VERSION: 1.19.4` (ya no `@latest`). El cron no cambia.
 
 > **Cambio (24/10/2026):** orquestador y reviewer pasan a **Kimi K3.1 Pro** (`opencode-go/kimi-k3.1-pro`); el builder pasa de DeepSeek V4 Pro a **DeepSeek V4.1 Flash** (`opencode-go/deepseek-v4.1-flash`). El builder sigue **sin clave `steps`**. Horario del run: `cron: '0 23 * * *'` (00:00 Europe/Madrid en invierno, CET; en verano, CEST, sería `'0 22 * * *'`). En esa fecha seguía siendo una issue por run. Mantén **Use balance desactivado**.
@@ -22,7 +24,7 @@ IDs exactos: `opencode-go/kimi-k3.1-pro` y `opencode-go/deepseek-v4.1-flash`.
 
 > **Equivalencias del tablero KAN (obligatorias):** Ready = **Listo**, Done = **Finalizada** (In Progress = En curso). Es la misma regla que el contrato de Claude (`multiprovider/claude/01-jira-three-parallel-STRICT-ROUTING.md`, "Localized status names") y el de Cursor: cualquier otro nombre no es Ready/Done, y `JIRA_READY_STATUS`/`JIRA_DONE_STATUS` ya no amplían la lista. **No hace falta configurar nada:** sin variables nuevas, sin `issue_key` obligatorio y sin cambiar las stories de Jira (repo por defecto = el del workflow; se aceptan `Repository:`, `Repositorio:` y `Repositorio destino:`). Las ramas de feature se crean siempre desde un **fetch fresco de `origin/master`**.
 
-**Disciplina por story:** 1 builder inicial, 0 reinicios nuevos, máximo 1 corrección solamente si se puede retomar EXACTAMENTE el mismo builder y branch; sin reanudación verificable = `BLOCKED`. El workflow puede llevar hasta 3 stories a la vez, cada una en su job, con esos mismos topes. Antes se hablaba de 3 rondas de corrección: ese límite se ha reducido **deliberadamente en este piloto** por el incidente de cuota.
+**Disciplina por story:** 1 builder inicial y 0 reinicios desde cero. Tras `CHANGES_REQUESTED`, máximo 3 ciclos de corrección y máximo 3 re-revisiones después de la review inicial (4 reviews en total), solo retomando EXACTAMENTE el mismo builder y la misma rama. La review inicial no cuenta como re-revisión. Si no hay reanudación verificable, la corrección no publica cambios, o se agota cualquiera de los dos cupos, `BLOCKED` y el Draft PR se queda. El workflow puede llevar hasta 3 stories a la vez, cada una en su job, con esos mismos topes de corrección y re-revisión.
 
 **Controles reales (no solo prompts):**
 
