@@ -40,11 +40,13 @@
 | PR no creada | `build` | POSTFLIGHT_BLOCKED, sin falsa Human Review |
 | Reviewer no ve diff publicado | `build` | BLOCKED, no PASS |
 | Review PASS en commit anterior | `build` | POSTFLIGHT_BLOCKED por SHA de HEAD |
+| `CHANGES_REQUESTED` dentro del cupo | `build` | Hasta 3 correcciones en la misma sesión y PR, y hasta 3 re-reviews además de la inicial (MAX_CORRECTIONS=3, MAX_RE_REVIEWS=3, MAX_TOTAL_REVIEWS=4 en `automation/opencode/review_budget.py`). PASS en la review inicial o en cualquiera de esas 3 re-reviews cierra la story |
+| `CHANGES_REQUESTED` tras la 3.ª re-review | `build` | BLOCKED. No hay 4.ª corrección ni 5.ª review. `decidir_tras_review` solo diría `bloquear`; no ejecuta ese paso |
 | Todo correcto, checks reales | `build` | UNA Draft PR + comentario de review ligada a HEAD + estado Jira Human Review |
 
 ## Diagnóstico de eventos
 
-El watchdog guarda JSON bruto (potencialmente sensible) sólo en `$RUNNER_TEMP` de ese job y NO lo sube como artifact. Publica un resumen sin specs/tokens. Los eventos `task` pueden no emitirse idénticamente para todas las versiones de OpenCode; su ausencia en el resumen NO demuestra que no haya subagentes. Verifica en la sesión OpenCode que se llamó a DeepSeek V4.1 Flash una única vez y a un nuevo Kimi K3.1 Pro para review. El flujo no merece considerarse validado hasta tener prueba externa de esas identidades.
+El watchdog guarda JSON bruto (potencialmente sensible) sólo en `$RUNNER_TEMP` de ese job y NO lo sube como artifact. Publica un resumen sin specs/tokens. Los eventos `task` pueden no emitirse idénticamente para todas las versiones de OpenCode; su ausencia en el resumen NO demuestra que no haya subagentes. Verifica en la sesión OpenCode que la implementación inicial llamó a DeepSeek V4.1 Flash una vez y que las correcciones, si las hay, reanudaron esa misma sesión (hasta MAX_CORRECTIONS=3). El revisor es Kimi K3.1 Pro: la review inicial y, como máximo, MAX_RE_REVIEWS=3 re-reviews (MAX_TOTAL_REVIEWS=4 en `automation/opencode/review_budget.py`). El flujo no merece considerarse validado hasta tener prueba externa de esas identidades. El runner no llama a `decidir_tras_review`: esa función fija la semántica; el orquestador es quien tiene que seguirla.
 
 ## Limites para volver a producción
 

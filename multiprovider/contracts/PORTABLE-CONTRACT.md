@@ -28,6 +28,7 @@ The human owns product architecture, issue approval, conflict resolution, and me
 - Publish one independent DRAFT PR against actual default branch. PR includes `Factory Engine: <claude|cursor|opencode>`, Jira issue URL, test evidence, acceptance mapping, documented AGENTS.md changes and human-review requirement.
 - Independent review must read the real published PR diff and original Jira spec, including changes to AGENTS.md. If tool support cannot provide an independent reviewer, state this gap; never call self-review independent.
 - Review failures -> corrections in the SAME branch/PR, within configured max 3 rounds; new independent review each round when available. `AI Review` during review; `Human Review` only after a real published PR, verified checks and reviewer PASS.
+- OpenCode Go effective budget (`automation/opencode/review_budget.py`): MAX_CORRECTIONS=3 corrections after `CHANGES_REQUESTED`, MAX_RE_REVIEWS=3 re-reviews besides the initial review, MAX_TOTAL_REVIEWS=4. The OpenCode section below is the rule that engine follows. Cursor keeps the correction sentence in its own addendum. Claude keeps the shared correction-round baseline above.
 - No agent merges, rebases across feature branches, resolves conflicts between unrelated PRs, deploys, changes permissions/secrets or bypasses policy. User handles final PR approval/merge and Jira Done until sync is implemented.
 
 ## Batch safety
@@ -43,3 +44,16 @@ Fail closed when required provider/Jira/GitHub/MCP permissions or actual code ev
 ## Cursor v2 operational addendum
 
 Cursor uses ONE scheduled orchestration Automation (not two independent PR-trigger runs) plus repository subagents. It implements up to 3 eligible issues in parallel in the same invocation: before dispatch the orchestrator creates one git worktree per issue (`git worktree add /tmp/<KEY>-wt -b cursor/<KEY>-<slug> <BASE_COMMIT>` from the frozen `origin/master` after a fetch) and verifies it; that verification is the isolation proof. A worktree that cannot be created/verified makes only that issue `CONFIG_BLOCKED`; a dirty parent checkout after a builder makes the affected issue `BLOCKED`. A new read-only reviewer subagent inspects the published diff after every change; because the reviewer cannot make authenticated GitHub calls, the orchestrator fetches the published PR diff with authenticated git (`git fetch origin pull/<N>/head:pr-<N>` + `git diff <BASE_COMMIT>...pr-<N>`) and hands it over as a local file/text. Up to 3 corrections occur on the same branch/PR. AGENTS.md changes are owned by the parent orchestrator and reviewed before Jira Human Review. Separate v1 PR-event reviewer must be disabled. These are contracts, not guaranteed platform capabilities.
+
+## OpenCode Go review budget
+
+Effective for the OpenCode runner. Cursor and Claude are outside this section.
+
+Authoritative integers: `automation/opencode/review_budget.py` (`MAX_CORRECTIONS`, `MAX_RE_REVIEWS`, `MAX_TOTAL_REVIEWS`). In this contracts repository that module lives at `multiprovider/opencode/automation/opencode/review_budget.py`. `verificar_textos` runs from `check_config.py` before inference and checks that the published texts match those integers. `decidir_tras_review` only classifies one verdict (`aceptar`, `corregir`, `bloquear`); it does not resume the builder or launch reviewers. The orchestrator prompt performs that loop.
+
+- Up to 3 corrections after a reviewer `CHANGES_REQUESTED` (MAX_CORRECTIONS=3). The initial implementation is not a correction. Each correction resumes the same builder session on the same branch and PR. A fresh builder is not a correction path.
+- Up to 3 re-reviews (MAX_RE_REVIEWS=3) in addition to the initial review. Maximum 4 reviews in total (MAX_TOTAL_REVIEWS=4). Each re-review is a new independent reviewer of the published PR head.
+- PASS on the initial review, or PASS on any of the 3 re-reviews, accepts the story. A PASS on review 4 (the third re-review) accepts. Do not treat that PASS as exhaustion of the budget.
+- If the re-review that follows the 3rd correction is still `CHANGES_REQUESTED`, stop as BLOCKED. Do not start a 4th correction or a 5th review.
+- The decision is the same one implemented by `decidir_tras_review`: with `corrections_already_done == review_index - 1`, CHANGES_REQUESTED on reviews 1, 2 and 3 starts the next cycle, and CHANGES_REQUESTED on review 4 blocks. A review ceiling of 1 re-review, or of 3 total reviews, is not the OpenCode cap: either one would stop a cycle that MAX_CORRECTIONS=3 still allows.
+- Time, token, step and story-selection caps stay as already configured for OpenCode (orchestrator 40 steps, reviewer 15 steps, builder without a step limit, watchdog 20400 s / 900 s without edits / 5M reported input tokens, at most 3 stories).

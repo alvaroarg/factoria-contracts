@@ -49,19 +49,26 @@ class CheckConfigTests(unittest.TestCase):
 class ChangesRequestedQuotaTests(unittest.TestCase):
     """OpenCode CHANGES_REQUESTED caps: 3 corrections and 3 re-reviews (4 reviews total)."""
 
-    english = 'at most 3 correction cycles and at most 3 re-reviews after the initial review (4 reviews total)'
+    marks = (
+        'MAX_CORRECTIONS=3',
+        'MAX_RE_REVIEWS=3',
+        'MAX_TOTAL_REVIEWS=4',
+        'automation/opencode/review_budget.py',
+    )
     spanish = 'máximo 3 ciclos de corrección y máximo 3 re-revisiones después de la review inicial (4 reviews en total)'
 
     def test_operative_contracts_share_one_quota(self):
-        files = {
-            '.opencode/agents/factory-orchestrator.md': self.english,
-            'automation/opencode/pilot-prompt.md': self.english,
-            '.github/workflows/opencode-factory-PILOT.yml': self.english,
-            'SETUP-AND-LIMITATIONS.md': self.english,
-            'V3-README.md': self.spanish,
-        }
+        marked = (
+            '.opencode/agents/factory-orchestrator.md',
+            'automation/opencode/pilot-prompt.md',
+            '.github/workflows/opencode-factory.yml',
+            '.github/workflows/opencode-factory-PILOT.yml',
+            'MIGRACION.md',
+            'PRUEBAS-Y-ARRANQUE-LIMPIO.md',
+        )
         readme = (ROOT.parents[1] / 'README.md').read_text(encoding='utf-8')
         self.assertIn(self.spanish.casefold(), readme.casefold())
+        self.assertIn(self.spanish.casefold(), (ROOT / 'V3-README.md').read_text(encoding='utf-8').casefold())
         retired = (
             'ONE NEW reviewer',
             '**one** correction',
@@ -70,11 +77,12 @@ class ChangesRequestedQuotaTests(unittest.TestCase):
             'obtain one independent',
             'máximo 1 corrección',
             'Máximo 1, y solo si',
+            'automatic re-attempts',
         )
-        for rel, phrase in files.items():
+        for rel in marked:
             text = (ROOT / rel).read_text(encoding='utf-8')
-            flat = ' '.join(text.split())
-            self.assertIn(phrase.casefold(), flat.casefold(), rel)
+            for mark in self.marks:
+                self.assertIn(mark, text, rel)
             for old in retired:
                 self.assertNotIn(old, text, rel + ' still has ' + old)
         for old in ('Máximo 1, y solo si', 'máximo 1 corrección', '(max 3 rounds)'):
