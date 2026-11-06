@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Zero-token static + OpenCode CLI identity check; fail closed on fallback risk."""
+import importlib.util
 import json
 import os
 import re
@@ -80,7 +81,23 @@ def require_opencode_go_models(run_cmd=None, sleep=None, attempts=None, delay=No
     )
 
 
+def _verificar_cupo_de_review():
+    """Fail closed if prompts and the review-budget module disagree.
+
+    Runs before any model call. ``verificar_textos`` only checks published
+    marks; it does not run the correction loop. ``decidir_tras_review`` is
+    not called here.
+    """
+    path = Path(__file__).resolve().parent / "review_budget.py"
+    spec = importlib.util.spec_from_file_location("opencode_review_budget", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    # multiprovider/opencode/automation/opencode/check_config.py -> repo root.
+    module.verificar_textos(Path(__file__).resolve().parents[4])
+
+
 def main():
+    _verificar_cupo_de_review()
     config = json.loads((ROOT / "opencode.json").read_text(encoding="utf-8"))
     if config.get("default_agent") != "factory-orchestrator":
         raise ValueError("default_agent must be factory-orchestrator; never allow fallback to build")

@@ -16,6 +16,12 @@ name: OpenCode Factory - up to 3 issues
 # Concurrency is the workflow, not each matrix job: one run per repo.
 # The factory matrix runs up to 3 stories at once (fail-fast off). Each job
 # has the same caps and branches from a fresh fetch of origin/master.
+# Review budget per story is independent of those caps
+# (automation/opencode/review_budget.py): MAX_CORRECTIONS=3 after
+# CHANGES_REQUESTED, MAX_RE_REVIEWS=3 besides the initial review,
+# MAX_TOTAL_REVIEWS=4. A lower review cap must not stop an earlier cycle.
+# check_config.py calls verificar_textos before inference. decidir_tras_review
+# only classifies one verdict; it does not run the correction loop.
 on:
   schedule:
     - cron: '0 23 * * *' # 00:00 Europe/Madrid en invierno (CET); en verano (CEST) sería '0 22 * * *'

@@ -46,6 +46,68 @@ class CheckConfigTests(unittest.TestCase):
         self.assertIn('jira', cfg['mcp'])
 
 
+class ChangesRequestedQuotaTests(unittest.TestCase):
+    """OpenCode CHANGES_REQUESTED caps: 3 corrections and 3 re-reviews (4 reviews total)."""
+
+    marks = (
+        'MAX_CORRECTIONS=3',
+        'MAX_RE_REVIEWS=3',
+        'MAX_TOTAL_REVIEWS=4',
+        'automation/opencode/review_budget.py',
+    )
+    spanish = 'máximo 3 ciclos de corrección y máximo 3 re-revisiones después de la review inicial (4 reviews en total)'
+
+    def test_operative_contracts_share_one_quota(self):
+        marked = (
+            '.opencode/agents/factory-orchestrator.md',
+            'automation/opencode/pilot-prompt.md',
+            '.github/workflows/opencode-factory.yml',
+            '.github/workflows/opencode-factory-PILOT.yml',
+            'MIGRACION.md',
+            'PRUEBAS-Y-ARRANQUE-LIMPIO.md',
+        )
+        readme = (ROOT.parents[1] / 'README.md').read_text(encoding='utf-8')
+        self.assertIn(self.spanish.casefold(), readme.casefold())
+        self.assertIn(self.spanish.casefold(), (ROOT / 'V3-README.md').read_text(encoding='utf-8').casefold())
+        retired = (
+            'ONE NEW reviewer',
+            '**one** correction',
+            'policy is suspended',
+            '(max 3 rounds)',
+            'obtain one independent',
+            'máximo 1 corrección',
+            'Máximo 1, y solo si',
+            'automatic re-attempts',
+        )
+        for rel in marked:
+            text = (ROOT / rel).read_text(encoding='utf-8')
+            for mark in self.marks:
+                self.assertIn(mark, text, rel)
+            for old in retired:
+                self.assertNotIn(old, text, rel + ' still has ' + old)
+        for old in ('Máximo 1, y solo si', 'máximo 1 corrección', '(max 3 rounds)'):
+            self.assertNotIn(old, readme)
+
+    def test_other_opencode_caps_unchanged(self):
+        orch = (ROOT / '.opencode' / 'agents' / 'factory-orchestrator.md').read_text(encoding='utf-8')
+        prompt = (ROOT / 'automation' / 'opencode' / 'pilot-prompt.md').read_text(encoding='utf-8')
+        for text in (orch, prompt):
+            self.assertIn('origin/master', text)
+            self.assertIn('Ready', text)
+            self.assertIn('Listo', text)
+            self.assertIn('Done', text)
+            self.assertIn('Finalizada', text)
+        self.assertIn('40 agent steps', orch)
+        self.assertIn('reviewer 15', orch)
+        self.assertIn('20400 s', orch)
+        self.assertIn('900 s', orch)
+        self.assertIn('5M reported input tokens', orch)
+        self.assertIn('up to 3 jobs in parallel', orch)
+        self.assertIn('model: opencode-go/kimi-k3.1-pro', orch)
+        self.assertIn('DeepSeek V4.1 Flash', orch)
+        self.assertIn('Kimi K3.1 Pro', orch)
+
+
 class ModelListRetryTests(unittest.TestCase):
     required = ('opencode-go/deepseek-v4.1-flash', 'opencode-go/kimi-k3.1-pro')
 
